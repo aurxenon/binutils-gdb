@@ -14,7 +14,7 @@
 
 case $host in
  *-*-irix* | \
- *-*-solaris2.[01] | *-*-solaris2.[2-9]* | *-*-solaris2.10* | \
+ *-*-solaris2.[01] | *-*-solaris2.[2-9]* | \
  alpha*-*-osf* | \
  alpha*-*-freebsd* | \
  alpha*-*-kfreebsd*-gnu | \

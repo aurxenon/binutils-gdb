@@ -13,7 +13,7 @@
 
 case $targ in
  *-*-irix* | \
- *-*-solaris2.[01] | *-*-solaris2.[2-9]* | *-*-solaris2.10* | \
+ *-*-solaris2.[01] | *-*-solaris2.[2-9]* | \
  *-*-netbsdpe* | \
  alpha*-*-osf* | \
  alpha*-*-freebsd* | \
