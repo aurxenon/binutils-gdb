@@ -3327,7 +3327,7 @@ struct breakpoint_objfile_data
   std::vector<probe *> exception_probes;
 };
 
-static const struct objfile_key<breakpoint_objfile_data>
+static const registry<objfile>::key<breakpoint_objfile_data>
   breakpoint_objfile_key;
 
 /* Minimal symbol not found sentinel.  */
@@ -13141,6 +13141,63 @@ enable_disable_bp_num_loc (int bp_num, int loc_num, bool enable)
     }
   update_global_location_list (UGLL_DONT_INSERT);
 
+  gdb::observers::breakpoint_modified.notify (loc->owner);
+}
+
+/* Calculates LOC_NUM for LOC by traversing the bp_location chain of LOC's
+   owner.  1-based indexing.  -1 signals NOT FOUND.  */
+
+static int
+find_loc_num_by_location (bp_location *loc)
+{
+  if (loc != nullptr && loc->owner != nullptr)
+    {
+      /* Locations use 1-based indexing.  */
+      int loc_num = 1;
+      for (bp_location *it : loc->owner->locations ())
+	{
+	  if (it == loc)
+	    return loc_num;
+	  loc_num++;
+	}
+    }
+  return -1;
+}
+
+/* Enable or disable a breakpoint location LOC.  ENABLE
+   specifies whether to enable or disable.  */
+
+void
+enable_disable_bp_location (bp_location *loc, bool enable)
+{
+  if (loc == nullptr)
+    error (_("Breakpoint location is invalid."));
+
+  if (loc->owner == nullptr)
+    error (_("Breakpoint location does not have an owner breakpoint."));
+
+  if (loc->disabled_by_cond && enable)
+    {
+      int loc_num = find_loc_num_by_location (loc);
+      if (loc_num == -1)
+	error (_("Breakpoint location LOC_NUM could not be found."));
+      else
+	error (_("Breakpoint %d's condition is invalid at location %d, "
+		 "cannot enable."), loc->owner->number, loc_num);
+    }
+
+  if (loc->enabled != enable)
+    {
+      loc->enabled = enable;
+      mark_breakpoint_location_modified (loc);
+    }
+
+  if (target_supports_enable_disable_tracepoint ()
+      && current_trace_status ()->running && loc->owner
+      && is_tracepoint (loc->owner))
+    target_disable_tracepoint (loc);
+
+  update_global_location_list (UGLL_DONT_INSERT);
   gdb::observers::breakpoint_modified.notify (loc->owner);
 }
 
