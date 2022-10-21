@@ -1116,8 +1116,7 @@ linux_nat_target::attach (const char *args, int from_tty)
 		 gdb_signal_to_string (signo));
 	}
 
-      internal_error (__FILE__, __LINE__,
-		      _("unexpected status %d for PID %ld"),
+      internal_error (_("unexpected status %d for PID %ld"),
 		      status, (long) ptid.lwp ());
     }
 
@@ -1844,11 +1843,9 @@ linux_handle_extended_wait (struct lwp_info *lp, int status)
 	  if (ret == -1)
 	    perror_with_name (_("waiting for new child"));
 	  else if (ret != new_pid)
-	    internal_error (__FILE__, __LINE__,
-			    _("wait returned unexpected PID %d"), ret);
+	    internal_error (_("wait returned unexpected PID %d"), ret);
 	  else if (!WIFSTOPPED (status))
-	    internal_error (__FILE__, __LINE__,
-			    _("wait returned unexpected status 0x%x"), status);
+	    internal_error (_("wait returned unexpected status 0x%x"), status);
 	}
 
       ptid_t child_ptid (new_pid, new_pid);
@@ -1989,8 +1986,7 @@ linux_handle_extended_wait (struct lwp_info *lp, int status)
 	return 0;
     }
 
-  internal_error (__FILE__, __LINE__,
-		  _("unknown ptrace event %d"), event);
+  internal_error (_("unknown ptrace event %d"), event);
 }
 
 /* Suspend waiting for a signal.  We're mostly interested in
@@ -4231,7 +4227,7 @@ linux_nat_target::async (bool enable)
   if (enable)
     {
       if (!async_file_open ())
-	internal_error (__FILE__, __LINE__, "creating event pipe failed.");
+	internal_error ("creating event pipe failed.");
 
       add_file_handler (async_wait_fd (), handle_target_event, NULL,
 			"linux-nat");
@@ -4372,7 +4368,7 @@ linux_nat_fileio_pid_of (struct inferior *inf)
 int
 linux_nat_target::fileio_open (struct inferior *inf, const char *filename,
 			       int flags, int mode, int warn_if_slow,
-			       int *target_errno)
+			       fileio_error *target_errno)
 {
   int nat_flags;
   mode_t nat_mode;
@@ -4397,7 +4393,7 @@ linux_nat_target::fileio_open (struct inferior *inf, const char *filename,
 
 gdb::optional<std::string>
 linux_nat_target::fileio_readlink (struct inferior *inf, const char *filename,
-				   int *target_errno)
+				   fileio_error *target_errno)
 {
   char buf[PATH_MAX];
   int len;
@@ -4417,7 +4413,7 @@ linux_nat_target::fileio_readlink (struct inferior *inf, const char *filename,
 
 int
 linux_nat_target::fileio_unlink (struct inferior *inf, const char *filename,
-				 int *target_errno)
+				 fileio_error *target_errno)
 {
   int ret;
 

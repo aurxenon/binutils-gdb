@@ -196,6 +196,8 @@ msp430_register_name (struct gdbarch *gdbarch, int regnr)
     "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15"
   };
 
+  gdb_static_assert (ARRAY_SIZE (reg_names) == (MSP430_NUM_REGS
+						+ MSP430_NUM_PSEUDO_REGS));
   return reg_names[regnr];
 }
 
@@ -455,7 +457,7 @@ msp430_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
    return that struct as the value of this function.  */
 
 static struct msp430_prologue *
-msp430_analyze_frame_prologue (struct frame_info *this_frame,
+msp430_analyze_frame_prologue (frame_info_ptr this_frame,
 			       void **this_prologue_cache)
 {
   if (!*this_prologue_cache)
@@ -483,7 +485,7 @@ msp430_analyze_frame_prologue (struct frame_info *this_frame,
 /* Given a frame and a prologue cache, return this frame's base.  */
 
 static CORE_ADDR
-msp430_frame_base (struct frame_info *this_frame, void **this_prologue_cache)
+msp430_frame_base (frame_info_ptr this_frame, void **this_prologue_cache)
 {
   struct msp430_prologue *p
     = msp430_analyze_frame_prologue (this_frame, this_prologue_cache);
@@ -495,7 +497,7 @@ msp430_frame_base (struct frame_info *this_frame, void **this_prologue_cache)
 /* Implement the "frame_this_id" method for unwinding frames.  */
 
 static void
-msp430_this_id (struct frame_info *this_frame,
+msp430_this_id (frame_info_ptr this_frame,
 		void **this_prologue_cache, struct frame_id *this_id)
 {
   *this_id = frame_id_build (msp430_frame_base (this_frame,
@@ -506,7 +508,7 @@ msp430_this_id (struct frame_info *this_frame,
 /* Implement the "frame_prev_register" method for unwinding frames.  */
 
 static struct value *
-msp430_prev_register (struct frame_info *this_frame,
+msp430_prev_register (frame_info_ptr this_frame,
 		      void **this_prologue_cache, int regnum)
 {
   struct msp430_prologue *p
@@ -569,11 +571,11 @@ msp430_return_value (struct gdbarch *gdbarch,
 		     gdb_byte *readbuf, const gdb_byte *writebuf)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  LONGEST valtype_len = TYPE_LENGTH (valtype);
+  LONGEST valtype_len = valtype->length ();
   msp430_gdbarch_tdep *tdep = gdbarch_tdep<msp430_gdbarch_tdep> (gdbarch);
   int code_model = tdep->code_model;
 
-  if (TYPE_LENGTH (valtype) > 8
+  if (valtype->length () > 8
       || valtype->code () == TYPE_CODE_STRUCT
       || valtype->code () == TYPE_CODE_UNION)
     return RETURN_VALUE_STRUCT_CONVENTION;
@@ -658,7 +660,7 @@ msp430_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
   /* Dereference function pointer types.  */
   while (func_type->code () == TYPE_CODE_PTR)
-    func_type = TYPE_TARGET_TYPE (func_type);
+    func_type = func_type->target_type ();
 
   /* The end result had better be a function or a method.  */
   gdb_assert (func_type->code () == TYPE_CODE_FUNC
@@ -689,7 +691,7 @@ msp430_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 	  struct value *arg = args[i];
 	  const gdb_byte *arg_bits = value_contents_all (arg).data ();
 	  struct type *arg_type = check_typedef (value_type (arg));
-	  ULONGEST arg_size = TYPE_LENGTH (arg_type);
+	  ULONGEST arg_size = arg_type->length ();
 	  int offset;
 	  int current_arg_on_stack;
 	  gdb_byte struct_addr_buf[4];
@@ -802,7 +804,7 @@ msp430_in_return_stub (struct gdbarch *gdbarch, CORE_ADDR pc,
 
 /* Implement the "skip_trampoline_code" gdbarch method.  */
 static CORE_ADDR
-msp430_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
+msp430_skip_trampoline_code (frame_info_ptr frame, CORE_ADDR pc)
 {
   struct bound_minimal_symbol bms;
   const char *stub_name;
@@ -863,8 +865,7 @@ msp430_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	    code_model = MSP_LARGE_CODE_MODEL;
 	    break;
 	  default:
-	    internal_error (__FILE__, __LINE__,
-			    _("Unknown msp430x code memory model"));
+	    internal_error (_("Unknown msp430x code memory model"));
 	    break;
 	  }
 	break;
@@ -996,5 +997,5 @@ void _initialize_msp430_tdep ();
 void
 _initialize_msp430_tdep ()
 {
-  register_gdbarch_init (bfd_arch_msp430, msp430_gdbarch_init);
+  gdbarch_register (bfd_arch_msp430, msp430_gdbarch_init);
 }

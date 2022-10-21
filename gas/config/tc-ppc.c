@@ -1382,6 +1382,10 @@ PowerPC options:\n"));
   fprintf (stream, _("\
 -mpower10, -mpwr10      generate code for Power10 architecture\n"));
   fprintf (stream, _("\
+-mlibresoc              generate code for Libre-SOC architecture\n"));
+  fprintf (stream, _("\
+-mfuture                generate code for 'future' architecture\n"));
+  fprintf (stream, _("\
 -mcell                  generate code for Cell Broadband Engine architecture\n"));
   fprintf (stream, _("\
 -mcom                   generate code for Power/PowerPC common instructions\n"));
@@ -1655,8 +1659,13 @@ ppc_setup_opcodes (void)
       for (i = 0; i < num_powerpc_operands; ++i)
 	{
 	  uint64_t mask = powerpc_operands[i].bitm;
+	  unsigned long flags = powerpc_operands[i].flags;
 	  uint64_t right_bit;
 	  unsigned int j;
+
+	  if ((flags & PPC_OPERAND_PLUS1) != 0
+	       && (flags & PPC_OPERAND_NONZERO) != 0)
+	    as_bad ("mutually exclusive operand flags");
 
 	  right_bit = mask & -mask;
 	  mask += right_bit;
@@ -1685,10 +1694,12 @@ ppc_setup_opcodes (void)
 	  unsigned int new_opcode = PPC_OP (op[0].opcode);
 
 #ifdef PRINT_OPCODE_TABLE
-	  printf ("%-14s\t#%04u\tmajor op: 0x%x\top: 0x%llx\tmask: 0x%llx\tflags: 0x%llx\n",
+	  printf ("%-14s\t#%04u\tmajor op: 0x%x\top: 0x%llx"
+		  "\tmask: 0x%llx\tflags: 0x%llx\n",
 		  op->name, (unsigned int) (op - powerpc_opcodes),
 		  new_opcode, (unsigned long long) op->opcode,
-		  (unsigned long long) op->mask, (unsigned long long) op->flags);
+		  (unsigned long long) op->mask,
+		  (unsigned long long) op->flags);
 #endif
 
 	  /* The major opcodes had better be sorted.  Code in the disassembler
@@ -1736,10 +1747,12 @@ ppc_setup_opcodes (void)
 	  unsigned int new_opcode = PPC_PREFIX_SEG (op[0].opcode);
 
 #ifdef PRINT_OPCODE_TABLE
-	  printf ("%-14s\t#%04u\tmajor op/2: 0x%x\top: 0x%llx\tmask: 0x%llx\tflags: 0x%llx\n",
+	  printf ("%-14s\t#%04u\tmajor op/2: 0x%x\top: 0x%llx"
+		  "\tmask: 0x%llx\tflags: 0x%llx\n",
 		  op->name, (unsigned int) (op - prefix_opcodes),
 		  new_opcode, (unsigned long long) op->opcode,
-		  (unsigned long long) op->mask, (unsigned long long) op->flags);
+		  (unsigned long long) op->mask,
+		  (unsigned long long) op->flags);
 #endif
 
 	  /* The major opcodes had better be sorted.  Code in the disassembler
@@ -1766,82 +1779,86 @@ ppc_setup_opcodes (void)
     for (op = prefix_opcodes; op < op_end; op++)
       str_hash_insert (ppc_hash, op->name, op, 0);
 
-  op_end = vle_opcodes + vle_num_opcodes;
-  for (op = vle_opcodes; op < op_end; op++)
+  if ((ppc_cpu & (PPC_OPCODE_VLE | PPC_OPCODE_ANY)) != 0)
     {
-      if (ENABLE_CHECKING)
+      unsigned int prev_seg = 0;
+      unsigned int seg;
+
+      op_end = vle_opcodes + vle_num_opcodes;
+      for (op = vle_opcodes; op < op_end; op++)
 	{
-	  unsigned new_seg = VLE_OP_TO_SEG (VLE_OP (op[0].opcode, op[0].mask));
+	  if (ENABLE_CHECKING)
+	    {
+	      seg = VLE_OP_TO_SEG (VLE_OP (op[0].opcode, op[0].mask));
 
 #ifdef PRINT_OPCODE_TABLE
-	  printf ("%-14s\t#%04u\tmajor op: 0x%x\top: 0x%llx\tmask: 0x%llx\tflags: 0x%llx\n",
-		  op->name, (unsigned int) (op - vle_opcodes),
-		  (unsigned int) new_seg, (unsigned long long) op->opcode,
-		  (unsigned long long) op->mask, (unsigned long long) op->flags);
+	      printf ("%-14s\t#%04u\tmajor op: 0x%x\top: 0x%llx"
+		      "\tmask: 0x%llx\tflags: 0x%llx\n",
+		      op->name, (unsigned int) (op - vle_opcodes),
+		      (unsigned int) seg, (unsigned long long) op->opcode,
+		      (unsigned long long) op->mask,
+		      (unsigned long long) op->flags);
 #endif
 
-	  /* The major opcodes had better be sorted.  Code in the disassembler
-	     assumes the insns are sorted according to major opcode.  */
-	  if (op != vle_opcodes
-	      && new_seg < VLE_OP_TO_SEG (VLE_OP (op[-1].opcode, op[-1].mask)))
-	    {
-	      as_bad (_("major opcode is not sorted for %s"), op->name);
-	      bad_insn = true;
+	      if (seg < prev_seg)
+		{
+		  as_bad (_("major opcode is not sorted for %s"), op->name);
+		  bad_insn = true;
+		}
+	      prev_seg = seg;
+	      bad_insn |= insn_validate (op);
 	    }
 
-	  bad_insn |= insn_validate (op);
+	  str_hash_insert (ppc_hash, op->name, op, 0);
 	}
+    }
 
-      if ((ppc_cpu & op->flags) != 0
-	  && !(ppc_cpu & op->deprecated)
-	  && str_hash_insert (ppc_hash, op->name, op, 0) != NULL)
+  /* LSP instructions */
+  if ((ppc_cpu & (PPC_OPCODE_LSP | PPC_OPCODE_ANY)) != 0)
+    {
+      unsigned int prev_seg = 0;
+      unsigned int seg;
+      op_end = lsp_opcodes + lsp_num_opcodes;
+      for (op = lsp_opcodes; op < op_end; op++)
 	{
-	  as_bad (_("duplicate %s"), op->name);
-	  bad_insn = true;
+	  if (ENABLE_CHECKING)
+	    {
+	      seg = LSP_OP_TO_SEG (op->opcode);
+	      if (seg < prev_seg)
+		{
+		  as_bad (_("opcode is not sorted for %s"), op->name);
+		  bad_insn = true;
+		}
+	      prev_seg = seg;
+	      bad_insn |= insn_validate (op);
+	    }
+
+	  str_hash_insert (ppc_hash, op->name, op, 0);
 	}
     }
 
   /* SPE2 instructions */
-  if ((ppc_cpu & PPC_OPCODE_SPE2) == PPC_OPCODE_SPE2)
+  if ((ppc_cpu & (PPC_OPCODE_SPE2 | PPC_OPCODE_ANY)) != 0)
     {
+      unsigned int prev_seg = 0;
+      unsigned int seg;
       op_end = spe2_opcodes + spe2_num_opcodes;
       for (op = spe2_opcodes; op < op_end; op++)
 	{
 	  if (ENABLE_CHECKING)
 	    {
-	      if (op != spe2_opcodes)
+	      seg = VLE_OP_TO_SEG (VLE_OP (op[0].opcode, op[0].mask));
+	      if (seg < prev_seg)
 		{
-		unsigned old_seg, new_seg;
-
-		old_seg = VLE_OP (op[-1].opcode, op[-1].mask);
-		old_seg = VLE_OP_TO_SEG (old_seg);
-		new_seg = VLE_OP (op[0].opcode, op[0].mask);
-		new_seg = VLE_OP_TO_SEG (new_seg);
-
-		/* The major opcodes had better be sorted.  Code in the
-		    disassembler assumes the insns are sorted according to
-		    major opcode.  */
-		if (new_seg < old_seg)
-		  {
 		  as_bad (_("major opcode is not sorted for %s"), op->name);
 		  bad_insn = true;
-		  }
 		}
-
+	      prev_seg = seg;
 	      bad_insn |= insn_validate (op);
 	    }
 
-	  if ((ppc_cpu & op->flags) != 0
-	      && !(ppc_cpu & op->deprecated)
-	      && str_hash_insert (ppc_hash, op->name, op, 0) != NULL)
-	    {
-	      as_bad (_("duplicate %s"), op->name);
-	      bad_insn = true;
-	    }
+	  str_hash_insert (ppc_hash, op->name, op, 0);
 	}
-
-      for (op = spe2_opcodes; op < op_end; op++)
-	str_hash_insert (ppc_hash, op->name, op, 0);
     }
 
   if (bad_insn)
@@ -1990,6 +2007,11 @@ ppc_insert_operand (uint64_t insn,
       max = (max >> 1) & -right;
       min = ~max & -right;
     }
+  else if ((operand->flags & PPC_OPERAND_NONZERO) != 0)
+    {
+      ++min;
+      ++max;
+    }
 
   if ((operand->flags & PPC_OPERAND_PLUS1) != 0)
     max++;
@@ -2040,10 +2062,15 @@ ppc_insert_operand (uint64_t insn,
       if (errmsg != (const char *) NULL)
 	as_bad_where (file, line, "%s", errmsg);
     }
-  else if (operand->shift >= 0)
-    insn |= (val & operand->bitm) << operand->shift;
   else
-    insn |= (val & operand->bitm) >> -operand->shift;
+    {
+      if ((operand->flags & PPC_OPERAND_NONZERO) != 0)
+	--val;
+      if (operand->shift >= 0)
+	insn |= (val & operand->bitm) << operand->shift;
+      else
+	insn |= (val & operand->bitm) >> -operand->shift;
+    }
 
   return insn;
 }
@@ -3992,7 +4019,7 @@ md_assemble (char *str)
          be set for VLE-only instructions or for VLE-only processors,
          however it'll remain clear for dual-mode instructions on
          dual-mode and, more importantly, standard-mode processors.  */
-      if ((ppc_cpu & opcode->flags) == PPC_OPCODE_VLE)
+      if (ppc_cpu & opcode->flags & PPC_OPCODE_VLE)
 	{
 	  ppc_apuinfo_section_add (PPC_APUINFO_VLE, 1);
 	  if (elf_section_data (now_seg) != NULL)
@@ -6660,8 +6687,6 @@ ppc_force_relocation (fixS *fix)
 int
 ppc_force_relocation (fixS *fix)
 {
-  /* Branch prediction relocations must force a relocation, as must
-     the vtable description relocs.  */
   switch (fix->fx_r_type)
     {
     case BFD_RELOC_PPC_B16_BRTAKEN:
@@ -6670,6 +6695,60 @@ ppc_force_relocation (fixS *fix)
     case BFD_RELOC_PPC_BA16_BRNTAKEN:
     case BFD_RELOC_24_PLT_PCREL:
     case BFD_RELOC_PPC64_TOC:
+    case BFD_RELOC_16_GOTOFF:
+    case BFD_RELOC_LO16_GOTOFF:
+    case BFD_RELOC_HI16_GOTOFF:
+    case BFD_RELOC_HI16_S_GOTOFF:
+    case BFD_RELOC_LO16_PLTOFF:
+    case BFD_RELOC_HI16_PLTOFF:
+    case BFD_RELOC_HI16_S_PLTOFF:
+    case BFD_RELOC_GPREL16:
+    case BFD_RELOC_16_BASEREL:
+    case BFD_RELOC_LO16_BASEREL:
+    case BFD_RELOC_HI16_BASEREL:
+    case BFD_RELOC_HI16_S_BASEREL:
+    case BFD_RELOC_PPC_TOC16:
+    case BFD_RELOC_PPC64_TOC16_LO:
+    case BFD_RELOC_PPC64_TOC16_HI:
+    case BFD_RELOC_PPC64_TOC16_HA:
+    case BFD_RELOC_PPC64_PLTGOT16:
+    case BFD_RELOC_PPC64_PLTGOT16_LO:
+    case BFD_RELOC_PPC64_PLTGOT16_HI:
+    case BFD_RELOC_PPC64_PLTGOT16_HA:
+    case BFD_RELOC_PPC64_GOT16_DS:
+    case BFD_RELOC_PPC64_GOT16_LO_DS:
+    case BFD_RELOC_PPC64_PLT16_LO_DS:
+    case BFD_RELOC_PPC64_SECTOFF_DS:
+    case BFD_RELOC_PPC64_SECTOFF_LO_DS:
+    case BFD_RELOC_PPC64_TOC16_DS:
+    case BFD_RELOC_PPC64_TOC16_LO_DS:
+    case BFD_RELOC_PPC64_PLTGOT16_DS:
+    case BFD_RELOC_PPC64_PLTGOT16_LO_DS:
+    case BFD_RELOC_PPC_EMB_NADDR16:
+    case BFD_RELOC_PPC_EMB_NADDR16_LO:
+    case BFD_RELOC_PPC_EMB_NADDR16_HI:
+    case BFD_RELOC_PPC_EMB_NADDR16_HA:
+    case BFD_RELOC_PPC_EMB_SDAI16:
+    case BFD_RELOC_PPC_EMB_SDA2I16:
+    case BFD_RELOC_PPC_EMB_SDA2REL:
+    case BFD_RELOC_PPC_EMB_SDA21:
+    case BFD_RELOC_PPC_EMB_MRKREF:
+    case BFD_RELOC_PPC_EMB_RELSEC16:
+    case BFD_RELOC_PPC_EMB_RELST_LO:
+    case BFD_RELOC_PPC_EMB_RELST_HI:
+    case BFD_RELOC_PPC_EMB_RELST_HA:
+    case BFD_RELOC_PPC_EMB_BIT_FLD:
+    case BFD_RELOC_PPC_EMB_RELSDA:
+    case BFD_RELOC_PPC_VLE_SDA21:
+    case BFD_RELOC_PPC_VLE_SDA21_LO:
+    case BFD_RELOC_PPC_VLE_SDAREL_LO16A:
+    case BFD_RELOC_PPC_VLE_SDAREL_LO16D:
+    case BFD_RELOC_PPC_VLE_SDAREL_HI16A:
+    case BFD_RELOC_PPC_VLE_SDAREL_HI16D:
+    case BFD_RELOC_PPC_VLE_SDAREL_HA16A:
+    case BFD_RELOC_PPC_VLE_SDAREL_HA16D:
+    case BFD_RELOC_PPC64_PLT_PCREL34:
+    case BFD_RELOC_PPC64_GOT_PCREL34:
       return 1;
     case BFD_RELOC_PPC_B26:
     case BFD_RELOC_PPC_BA26:

@@ -511,7 +511,7 @@ relevant stream.
 @end defun
 
 @findex gdb.flush
-@defun gdb.flush ()
+@defun gdb.flush (@r{[}, stream@r{]})
 Flush the buffer of a @value{GDBN} paginated stream so that the
 contents are displayed immediately.  @value{GDBN} will flush the
 contents of a stream automatically when it encounters a newline in the
@@ -6597,7 +6597,9 @@ factory function with @value{GDBN}.
 
 @var{name} is the name of the new window.  It's an error to try to
 replace one of the built-in windows, but other window types can be
-replaced.
+replaced.  The @var{name} should match the regular expression
+@code{[a-zA-Z][-_.a-zA-Z0-9]*}, it is an error to try and create a
+window with an invalid name.
 
 @var{function} is a factory function that is called to create the TUI
 window.  This is called with a single argument of type

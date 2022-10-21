@@ -2145,7 +2145,7 @@ lookup_symbol_aux (const char *name, symbol_name_match_type match_type,
 	     be typedefed; just be safe.  */
 	  t = check_typedef (t);
 	  if (t->is_pointer_or_reference ())
-	    t = TYPE_TARGET_TYPE (t);
+	    t = t->target_type ();
 
 	  if (t->code () != TYPE_CODE_STRUCT
 	      && t->code () != TYPE_CODE_UNION)
@@ -2608,23 +2608,6 @@ lookup_symbol_in_objfile (struct objfile *objfile, enum block_enum block_index,
 		  result.symbol != NULL ? " (via quick fns)" : "");
     }
   return result;
-}
-
-/* Find the language for partial symbol with NAME.  */
-
-static enum language
-find_quick_global_symbol_language (const char *name, const domain_enum domain)
-{
-  for (objfile *objfile : current_program_space->objfiles ())
-    {
-      bool symbol_found_p;
-      enum language lang
-	= objfile->lookup_global_symbol_language (name, domain, &symbol_found_p);
-      if (symbol_found_p)
-	return lang;
-    }
-
-  return language_unknown;
 }
 
 /* This function contains the common code of lookup_{global,static}_symbol.
@@ -3228,8 +3211,7 @@ find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
 	       should occur, we'd like to know about it, so error out,
 	       fatally.  */
 	    if (mfunsym.value_address () == pc)
-	      internal_error (__FILE__, __LINE__,
-		_("Infinite recursion detected in find_pc_sect_line;"
+	      internal_error (_("Infinite recursion detected in find_pc_sect_line;"
 		  "please file a bug report"));
 
 	    return find_pc_line (mfunsym.value_address (), 0);
@@ -6367,13 +6349,25 @@ find_main_name (void)
      Fallback to "main".  */
 
   /* Try to find language for main in psymtabs.  */
-  enum language lang
-    = find_quick_global_symbol_language ("main", VAR_DOMAIN);
-  if (lang != language_unknown)
-    {
-      set_main_name ("main", lang);
-      return;
-    }
+  bool symbol_found_p = false;
+  gdbarch_iterate_over_objfiles_in_search_order
+    (target_gdbarch (),
+     [&symbol_found_p] (objfile *obj)
+       {
+	 language lang
+	   = obj->lookup_global_symbol_language ("main", VAR_DOMAIN,
+						 &symbol_found_p);
+	 if (symbol_found_p)
+	   {
+	     set_main_name ("main", lang);
+	     return 1;
+	   }
+
+	 return 0;
+       }, nullptr);
+
+  if (symbol_found_p)
+    return;
 
   set_main_name ("main", language_unknown);
 }

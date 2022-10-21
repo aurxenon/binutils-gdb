@@ -132,6 +132,7 @@ struct loongarch_elf_link_hash_table
 
 #define elf_backend_want_dynrelro 1
 #define elf_backend_rela_normal 1
+#define elf_backend_default_execstack 0
 
 /* Generate a PLT header.  */
 
@@ -415,8 +416,22 @@ elfNN_loongarch_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
       elf_elfheader (obfd)->e_flags = in_flags;
       return true;
     }
+  else if (out_flags != in_flags)
+    {
+      if ((EF_LOONGARCH_IS_OBJ_V0 (out_flags)
+	   && EF_LOONGARCH_IS_OBJ_V1 (in_flags))
+	  || (EF_LOONGARCH_IS_OBJ_V0 (in_flags)
+	      && EF_LOONGARCH_IS_OBJ_V1 (out_flags)))
+	{
+	  elf_elfheader (obfd)->e_flags |= EF_LOONGARCH_OBJABI_V1;
+	  out_flags = elf_elfheader (obfd)->e_flags;
+	  in_flags = out_flags;
+	}
+    }
 
   /* Disallow linking different ABIs.  */
+  /* Only check relocation version.
+     The obj_v0 is compatible with obj_v1.  */
   if (EF_LOONGARCH_ABI(out_flags ^ in_flags) & EF_LOONGARCH_ABI_MASK)
     {
       _bfd_error_handler (_("%pB: can't link different ABI object."), ibfd);
@@ -745,6 +760,12 @@ loongarch_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 	case R_LARCH_PCALA_HI20:
 	  if (h != NULL)
 	    {
+	      /* For pcalau12i + jirl.  */
+	      h->needs_plt = 1;
+	      if (h->plt.refcount < 0)
+		h->plt.refcount = 0;
+	      h->plt.refcount++;
+
 	      h->non_got_ref = 1;
 	      h->pointer_equality_needed = 1;
 	    }
@@ -1572,15 +1593,16 @@ loongarch_elf_size_dynamic_sections (bfd *output_bfd,
       if (bfd_link_executable (info) && !info->nointerp)
 	{
 	  const char *interpreter;
-	  flagword flags = elf_elfheader (output_bfd)->e_flags;
 	  s = bfd_get_linker_section (dynobj, ".interp");
 	  BFD_ASSERT (s != NULL);
-	  if (EF_LOONGARCH_IS_ILP32 (flags))
+
+	  if (elf_elfheader (output_bfd)->e_ident[EI_CLASS] == ELFCLASS32)
 	    interpreter = "/lib32/ld.so.1";
-	  else if (EF_LOONGARCH_IS_LP64 (flags))
+	  else if (elf_elfheader (output_bfd)->e_ident[EI_CLASS] == ELFCLASS64)
 	    interpreter = "/lib64/ld.so.1";
 	  else
 	    interpreter = "/lib/ld.so.1";
+
 	  s->contents = (unsigned char *) interpreter;
 	  s->size = strlen (interpreter) + 1;
 	}
@@ -3172,6 +3194,8 @@ loongarch_elf_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
 						     htab->elf.srelgot, &rela);
 			}
 		      h->got.offset |= 1;
+		      bfd_put_NN (output_bfd, relocation,
+				  got->contents + got_off);
 		    }
 		}
 	      else
@@ -3193,9 +3217,8 @@ loongarch_elf_relocate_section (bfd *output_bfd, struct bfd_link_info *info,
 			}
 		      local_got_offsets[r_symndx] |= 1;
 		    }
+		  bfd_put_NN (output_bfd, relocation, got->contents + got_off);
 		}
-
-	      bfd_put_NN (output_bfd, relocation, got->contents + got_off);
 
 	      relocation = got_off + sec_addr (got);
 	    }
@@ -3506,6 +3529,12 @@ loongarch_elf_finish_dynamic_symbol (bfd *output_bfd,
 {
   struct loongarch_elf_link_hash_table *htab = loongarch_elf_hash_table (info);
   const struct elf_backend_data *bed = get_elf_backend_data (output_bfd);
+  asection *rela_dyn = bfd_get_section_by_name (output_bfd, ".rela.dyn");
+  struct bfd_link_order *lo = NULL;
+  Elf_Internal_Rela *slot = NULL, *last_slot = NULL;
+
+  if (rela_dyn)
+    lo = rela_dyn->map_head.link_order;
 
   if (h->plt.offset != MINUS_ONE)
     {
@@ -3515,6 +3544,7 @@ loongarch_elf_finish_dynamic_symbol (bfd *output_bfd,
       uint32_t plt_entry[PLT_ENTRY_INSNS];
       bfd_byte *loc;
       Elf_Internal_Rela rela;
+      asection *rela_sec = NULL;
 
       if (htab->elf.splt)
 	{
@@ -3567,31 +3597,31 @@ loongarch_elf_finish_dynamic_symbol (bfd *output_bfd,
 	  && (relplt == htab->elf.srelgot
 	      || relplt == htab->elf.irelplt))
 	{
-	    {
-	      rela.r_info = ELFNN_R_INFO (0, R_LARCH_IRELATIVE);
-	      rela.r_addend = (h->root.u.def.value
+	  rela.r_info = ELFNN_R_INFO (0, R_LARCH_IRELATIVE);
+	  rela.r_addend = (h->root.u.def.value
 			       + h->root.u.def.section->output_section->vma
 			       + h->root.u.def.section->output_offset);
-	    }
 
-	    /* Find the space after dyn sort.  */
+	  /* Find the space after dyn sort.  */
+	  while (slot == last_slot || slot->r_offset != 0)
 	    {
-	      Elf_Internal_Rela *dyn = (Elf_Internal_Rela *)relplt->contents;
-	      bool fill = false;
-	      for (;dyn < dyn + relplt->size / sizeof (*dyn); dyn++)
+	      if (slot != last_slot)
 		{
-		  if (0 == dyn->r_offset)
-		    {
-		      bed->s->swap_reloca_out (output_bfd, &rela,
-					       (bfd_byte *)dyn);
-		      relplt->reloc_count++;
-		      fill = true;
-		      break;
-		    }
+		  slot++;
+		  continue;
 		}
-	      BFD_ASSERT (fill);
+
+	      BFD_ASSERT (lo != NULL);
+	      rela_sec = lo->u.indirect.section;
+	      lo = lo->next;
+
+	      slot = (Elf_Internal_Rela *)rela_sec->contents;
+	      last_slot = (Elf_Internal_Rela *)(rela_sec->contents +
+						rela_sec->size);
 	    }
 
+	  bed->s->swap_reloca_out (output_bfd, &rela, (bfd_byte *)slot);
+	  rela_sec->reloc_count++;
 	}
       else
 	{

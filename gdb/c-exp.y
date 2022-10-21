@@ -865,10 +865,10 @@ exp	:	COMPLEX_INT
 			{
 			  operation_up real
 			    = (make_operation<long_const_operation>
-			       (TYPE_TARGET_TYPE ($1.type), 0));
+			       ($1.type->target_type (), 0));
 			  operation_up imag
 			    = (make_operation<long_const_operation>
-			       (TYPE_TARGET_TYPE ($1.type), $1.val));
+			       ($1.type->target_type (), $1.val));
 			  pstate->push_new<complex_operation>
 			    (std::move (real), std::move (imag), $1.type);
 			}
@@ -905,8 +905,7 @@ exp	:	FLOAT
 
 exp	:	COMPLEX_FLOAT
 			{
-			  struct type *underlying
-			    = TYPE_TARGET_TYPE ($1.type);
+			  struct type *underlying = $1.type->target_type ();
 
 			  float_data val;
 			  target_float_from_host_double (val.data (),
@@ -955,9 +954,10 @@ exp	:	SIZEOF '(' type ')'	%prec UNARY
 			       or a reference type, the result is the size of
 			       the referenced type."  */
 			  if (TYPE_IS_REFERENCE (type))
-			    type = check_typedef (TYPE_TARGET_TYPE (type));
+			    type = check_typedef (type->target_type ());
+
 			  pstate->push_new<long_const_operation>
-			    (int_type, TYPE_LENGTH (type));
+			    (int_type, type->length ());
 			}
 	;
 
@@ -1036,8 +1036,7 @@ exp	:	string_exp
 				  break;
 				default:
 				  /* internal error */
-				  internal_error (__FILE__, __LINE__,
-						  "unrecognized type in string concatenation");
+				  internal_error ("unrecognized type in string concatenation");
 				}
 			    }
 
@@ -3216,7 +3215,7 @@ classify_inner_name (struct parser_state *par_state,
     default:
       return NAME;
     }
-  internal_error (__FILE__, __LINE__, _("not reached"));
+  internal_error (_("not reached"));
 }
 
 /* The outer level of a two-level lexer.  This calls the inner lexer

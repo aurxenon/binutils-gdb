@@ -174,7 +174,7 @@ python_on_memory_change (struct inferior *inferior, CORE_ADDR addr, ssize_t len,
    command). */
 
 static void
-python_on_register_change (struct frame_info *frame, int regnum)
+python_on_register_change (frame_info_ptr frame, int regnum)
 {
   gdbpy_enter enter_py (target_gdbarch ());
 
@@ -746,7 +746,7 @@ infpy_thread_from_thread_handle (PyObject *self, PyObject *args, PyObject *kw)
     {
       struct value *val = value_object_to_value (handle_obj);
       bytes = value_contents_all (val).data ();
-      bytes_len = TYPE_LENGTH (value_type (val));
+      bytes_len = value_type (val)->length ();
     }
   else
     {

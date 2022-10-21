@@ -102,6 +102,9 @@ struct varobj_root
      to symbols that do not exist anymore.  */
   bool is_valid = true;
 
+  /* Set to true if the varobj was created as tracking a global.  */
+  bool global = false;
+
   /* Language-related operations for this variable and its
      children.  */
   const struct lang_varobj_ops *lang_ops = NULL;
@@ -222,10 +225,10 @@ gdbpy_enter_varobj::gdbpy_enter_varobj (const struct varobj *var)
 /* Return the full FRAME which corresponds to the given CORE_ADDR
    or NULL if no FRAME on the chain corresponds to CORE_ADDR.  */
 
-static struct frame_info *
+static frame_info_ptr
 find_frame_addr_in_frame_chain (CORE_ADDR frame_addr)
 {
-  struct frame_info *frame = NULL;
+  frame_info_ptr frame = NULL;
 
   if (frame_addr == (CORE_ADDR) 0)
     return NULL;
@@ -262,7 +265,7 @@ varobj_create (const char *objname,
 
   if (expression != NULL)
     {
-      struct frame_info *fi;
+      frame_info_ptr fi;
       struct frame_id old_id = null_frame_id;
       const struct block *block;
       const char *p;
@@ -336,6 +339,8 @@ varobj_create (const char *objname,
       var->format = variable_default_display (var.get ());
       var->root->valid_block =
 	var->root->floating ? NULL : tracker.block ();
+      var->root->global
+	= var->root->floating ? false : var->root->valid_block == nullptr;
       var->name = expression;
       /* For a root var, the name and the expr are the same.  */
       var->path_expr = expression;
@@ -1942,7 +1947,7 @@ name_of_child (struct varobj *var, int index)
 static bool
 check_scope (const struct varobj *var)
 {
-  struct frame_info *fi;
+  frame_info_ptr fi;
   bool scope;
 
   fi = frame_find_by_id (var->root->frame);
@@ -2348,52 +2353,36 @@ all_root_varobjs (gdb::function_view<void (struct varobj *var)> func)
     }
 }
 
-/* Invalidate varobj VAR if it is tied to locals and re-create it if it is
-   defined on globals.  It is a helper for varobj_invalidate.
-
-   This function is called after changing the symbol file, in this case the
-   pointers to "struct type" stored by the varobj are no longer valid.  All
-   varobj must be either re-evaluated, or marked as invalid here.  */
+/* Try to recreate the varobj VAR if it is a global or floating.  This is a
+   helper function for varobj_re_set.  */
 
 static void
-varobj_invalidate_iter (struct varobj *var)
+varobj_re_set_iter (struct varobj *var)
 {
-  /* global and floating var must be re-evaluated.  */
-  if (var->root->floating || var->root->valid_block == nullptr)
+  /* Invalidated global varobjs must be re-evaluated.  */
+  if (!var->root->is_valid && var->root->global)
     {
       struct varobj *tmp_var;
 
       /* Try to create a varobj with same expression.  If we succeed
-	 replace the old varobj, otherwise invalidate it.  */
+	 and have a global replace the old varobj.  */
       tmp_var = varobj_create (nullptr, var->name.c_str (), (CORE_ADDR) 0,
-			       var->root->floating
-			       ? USE_SELECTED_FRAME : USE_CURRENT_FRAME);
-      if (tmp_var != nullptr)
+			       USE_CURRENT_FRAME);
+      if (tmp_var != nullptr && tmp_var->root->global)
 	{
-	  gdb_assert (var->root->floating == tmp_var->root->floating);
 	  tmp_var->obj_name = var->obj_name;
 	  varobj_delete (var, 0);
 	  install_variable (tmp_var);
 	}
-      else if (!var->root->floating)
-	{
-	  /* Only invalidate globals as floating vars might still be valid in
-	     some other frame.  */
-	  var->root->is_valid = false;
-	}
     }
-  else /* locals must be invalidated.  */
-    var->root->is_valid = false;
 }
 
-/* Invalidate the varobjs that are tied to locals and re-create the ones that
-   are defined on globals.
-   Invalidated varobjs will be always printed in_scope="invalid".  */
+/* See varobj.h.  */
 
 void 
-varobj_invalidate (void)
+varobj_re_set (void)
 {
-  all_root_varobjs (varobj_invalidate_iter);
+  all_root_varobjs (varobj_re_set_iter);
 }
 
 /* Ensure that no varobj keep references to OBJFILE.  */

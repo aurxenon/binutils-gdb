@@ -476,7 +476,7 @@ i386_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
   else if (i386_word_regnum_p (gdbarch, regnum))
     return i386_word_names[regnum - tdep->ax_regnum];
 
-  internal_error (__FILE__, __LINE__, _("invalid regnum"));
+  internal_error (_("invalid regnum"));
 }
 
 /* Convert a dbx register number REG to the appropriate register
@@ -1965,7 +1965,7 @@ i386_skip_main_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 /* This function is 64-bit safe.  */
 
 static CORE_ADDR
-i386_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
+i386_unwind_pc (struct gdbarch *gdbarch, frame_info_ptr next_frame)
 {
   gdb_byte buf[8];
 
@@ -1977,7 +1977,7 @@ i386_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 /* Normal frames.  */
 
 static void
-i386_frame_cache_1 (struct frame_info *this_frame,
+i386_frame_cache_1 (frame_info_ptr this_frame,
 		    struct i386_frame_cache *cache)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
@@ -2078,7 +2078,7 @@ i386_frame_cache_1 (struct frame_info *this_frame,
 }
 
 static struct i386_frame_cache *
-i386_frame_cache (struct frame_info *this_frame, void **this_cache)
+i386_frame_cache (frame_info_ptr this_frame, void **this_cache)
 {
   struct i386_frame_cache *cache;
 
@@ -2102,7 +2102,7 @@ i386_frame_cache (struct frame_info *this_frame, void **this_cache)
 }
 
 static void
-i386_frame_this_id (struct frame_info *this_frame, void **this_cache,
+i386_frame_this_id (frame_info_ptr this_frame, void **this_cache,
 		    struct frame_id *this_id)
 {
   struct i386_frame_cache *cache = i386_frame_cache (this_frame, this_cache);
@@ -2121,7 +2121,7 @@ i386_frame_this_id (struct frame_info *this_frame, void **this_cache,
 }
 
 static enum unwind_stop_reason
-i386_frame_unwind_stop_reason (struct frame_info *this_frame,
+i386_frame_unwind_stop_reason (frame_info_ptr this_frame,
 			       void **this_cache)
 {
   struct i386_frame_cache *cache = i386_frame_cache (this_frame, this_cache);
@@ -2137,7 +2137,7 @@ i386_frame_unwind_stop_reason (struct frame_info *this_frame,
 }
 
 static struct value *
-i386_frame_prev_register (struct frame_info *this_frame, void **this_cache,
+i386_frame_prev_register (frame_info_ptr this_frame, void **this_cache,
 			  int regnum)
 {
   struct i386_frame_cache *cache = i386_frame_cache (this_frame, this_cache);
@@ -2236,7 +2236,7 @@ i386_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 
 static int
 i386_epilogue_frame_sniffer (const struct frame_unwind *self,
-			     struct frame_info *this_frame,
+			     frame_info_ptr this_frame,
 			     void **this_prologue_cache)
 {
   if (frame_relative_level (this_frame) == 0)
@@ -2247,7 +2247,7 @@ i386_epilogue_frame_sniffer (const struct frame_unwind *self,
 }
 
 static struct i386_frame_cache *
-i386_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
+i386_epilogue_frame_cache (frame_info_ptr this_frame, void **this_cache)
 {
   struct i386_frame_cache *cache;
   CORE_ADDR sp;
@@ -2282,7 +2282,7 @@ i386_epilogue_frame_cache (struct frame_info *this_frame, void **this_cache)
 }
 
 static enum unwind_stop_reason
-i386_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
+i386_epilogue_frame_unwind_stop_reason (frame_info_ptr this_frame,
 					void **this_cache)
 {
   struct i386_frame_cache *cache =
@@ -2295,7 +2295,7 @@ i386_epilogue_frame_unwind_stop_reason (struct frame_info *this_frame,
 }
 
 static void
-i386_epilogue_frame_this_id (struct frame_info *this_frame,
+i386_epilogue_frame_this_id (frame_info_ptr this_frame,
 			     void **this_cache,
 			     struct frame_id *this_id)
 {
@@ -2309,7 +2309,7 @@ i386_epilogue_frame_this_id (struct frame_info *this_frame,
 }
 
 static struct value *
-i386_epilogue_frame_prev_register (struct frame_info *this_frame,
+i386_epilogue_frame_prev_register (frame_info_ptr this_frame,
 				   void **this_cache, int regnum)
 {
   /* Make sure we've initialized the cache.  */
@@ -2391,7 +2391,7 @@ i386_in_stack_tramp_p (CORE_ADDR pc)
 
 static int
 i386_stack_tramp_frame_sniffer (const struct frame_unwind *self,
-				struct frame_info *this_frame,
+				frame_info_ptr this_frame,
 				void **this_cache)
 {
   if (frame_relative_level (this_frame) == 0)
@@ -2431,7 +2431,7 @@ i386_gen_return_address (struct gdbarch *gdbarch,
 /* Signal trampolines.  */
 
 static struct i386_frame_cache *
-i386_sigtramp_frame_cache (struct frame_info *this_frame, void **this_cache)
+i386_sigtramp_frame_cache (frame_info_ptr this_frame, void **this_cache)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
   i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
@@ -2480,7 +2480,7 @@ i386_sigtramp_frame_cache (struct frame_info *this_frame, void **this_cache)
 }
 
 static enum unwind_stop_reason
-i386_sigtramp_frame_unwind_stop_reason (struct frame_info *this_frame,
+i386_sigtramp_frame_unwind_stop_reason (frame_info_ptr this_frame,
 					void **this_cache)
 {
   struct i386_frame_cache *cache =
@@ -2493,7 +2493,7 @@ i386_sigtramp_frame_unwind_stop_reason (struct frame_info *this_frame,
 }
 
 static void
-i386_sigtramp_frame_this_id (struct frame_info *this_frame, void **this_cache,
+i386_sigtramp_frame_this_id (frame_info_ptr this_frame, void **this_cache,
 			     struct frame_id *this_id)
 {
   struct i386_frame_cache *cache =
@@ -2509,7 +2509,7 @@ i386_sigtramp_frame_this_id (struct frame_info *this_frame, void **this_cache,
 }
 
 static struct value *
-i386_sigtramp_frame_prev_register (struct frame_info *this_frame,
+i386_sigtramp_frame_prev_register (frame_info_ptr this_frame,
 				   void **this_cache, int regnum)
 {
   /* Make sure we've initialized the cache.  */
@@ -2520,7 +2520,7 @@ i386_sigtramp_frame_prev_register (struct frame_info *this_frame,
 
 static int
 i386_sigtramp_frame_sniffer (const struct frame_unwind *self,
-			     struct frame_info *this_frame,
+			     frame_info_ptr this_frame,
 			     void **this_prologue_cache)
 {
   gdbarch *arch = get_frame_arch (this_frame);
@@ -2562,7 +2562,7 @@ static const struct frame_unwind i386_sigtramp_frame_unwind =
 
 
 static CORE_ADDR
-i386_frame_base_address (struct frame_info *this_frame, void **this_cache)
+i386_frame_base_address (frame_info_ptr this_frame, void **this_cache)
 {
   struct i386_frame_cache *cache = i386_frame_cache (this_frame, this_cache);
 
@@ -2578,7 +2578,7 @@ static const struct frame_base i386_frame_base =
 };
 
 static struct frame_id
-i386_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
+i386_dummy_id (struct gdbarch *gdbarch, frame_info_ptr this_frame)
 {
   CORE_ADDR fp;
 
@@ -2605,7 +2605,7 @@ i386_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
    success.  */
 
 static int
-i386_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
+i386_get_longjmp_target (frame_info_ptr frame, CORE_ADDR *pc)
 {
   gdb_byte buf[4];
   CORE_ADDR sp, jb_addr;
@@ -2644,10 +2644,10 @@ i386_16_byte_align_p (struct type *type)
   type = check_typedef (type);
   if ((type->code () == TYPE_CODE_DECFLOAT
        || (type->code () == TYPE_CODE_ARRAY && type->is_vector ()))
-      && TYPE_LENGTH (type) == 16)
+      && type->length () == 16)
     return 1;
   if (type->code () == TYPE_CODE_ARRAY)
-    return i386_16_byte_align_p (TYPE_TARGET_TYPE (type));
+    return i386_16_byte_align_p (type->target_type ());
   if (type->code () == TYPE_CODE_STRUCT
       || type->code () == TYPE_CODE_UNION)
     {
@@ -2725,7 +2725,7 @@ i386_thiscall_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
       for (i = thiscall ? 1 : 0; i < nargs; i++)
 	{
-	  int len = TYPE_LENGTH (value_enclosing_type (args[i]));
+	  int len = value_enclosing_type (args[i])->length ();
 
 	  if (write_pass)
 	    {
@@ -2799,14 +2799,15 @@ i386_thiscall_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       if (objf != nullptr)
 	{
 	  /* Get corresponding .got.plt or .got section.  */
-	  asect = bfd_get_section_by_name (objf->obfd, ".got.plt");
+	  asect = bfd_get_section_by_name (objf->obfd.get (), ".got.plt");
 	  if (asect == nullptr)
-	    asect = bfd_get_section_by_name (objf->obfd, ".got");
+	    asect = bfd_get_section_by_name (objf->obfd.get (), ".got");
 	}
 
       if (asect != nullptr)
 	/* Translate asection to obj_section.  */
-	osect = maint_obj_section_from_bfd_section (objf->obfd, asect, objf);
+	osect = maint_obj_section_from_bfd_section (objf->obfd.get (),
+						    asect, objf);
 
       if (osect != nullptr)
 	{
@@ -2861,7 +2862,7 @@ i386_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 			   struct regcache *regcache, gdb_byte *valbuf)
 {
   i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
   gdb_byte buf[I386_MAX_REGISTER_SIZE];
 
   /* _Float16 and _Float16 _Complex values are returned via xmm0.  */
@@ -2905,8 +2906,7 @@ i386_extract_return_value (struct gdbarch *gdbarch, struct type *type,
 	  memcpy (valbuf + low_size, buf, len - low_size);
 	}
       else
-	internal_error (__FILE__, __LINE__,
-			_("Cannot extract return value of %d bytes long."),
+	internal_error (_("Cannot extract return value of %d bytes long."),
 			len);
     }
 }
@@ -2919,7 +2919,7 @@ i386_store_return_value (struct gdbarch *gdbarch, struct type *type,
 			 struct regcache *regcache, const gdb_byte *valbuf)
 {
   i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
 
   if (type->code () == TYPE_CODE_FLT)
     {
@@ -2970,8 +2970,7 @@ i386_store_return_value (struct gdbarch *gdbarch, struct type *type,
 				    valbuf + low_size);
 	}
       else
-	internal_error (__FILE__, __LINE__,
-			_("Cannot store return value of %d bytes long."), len);
+	internal_error (_("Cannot store return value of %d bytes long."), len);
     }
 }
 
@@ -2999,7 +2998,7 @@ i386_reg_struct_return_p (struct gdbarch *gdbarch, struct type *type)
 {
   i386_gdbarch_tdep *tdep = gdbarch_tdep<i386_gdbarch_tdep> (gdbarch);
   enum type_code code = type->code ();
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
 
   gdb_assert (code == TYPE_CODE_STRUCT
 	      || code == TYPE_CODE_UNION
@@ -3040,10 +3039,10 @@ i386_return_value (struct gdbarch *gdbarch, struct value *function,
 	|| code == TYPE_CODE_ARRAY)
        && !i386_reg_struct_return_p (gdbarch, type))
       /* Complex double and long double uses the struct return convention.  */
-      || (code == TYPE_CODE_COMPLEX && TYPE_LENGTH (type) == 16)
-      || (code == TYPE_CODE_COMPLEX && TYPE_LENGTH (type) == 24)
+      || (code == TYPE_CODE_COMPLEX && type->length () == 16)
+      || (code == TYPE_CODE_COMPLEX && type->length () == 24)
       /* 128-bit decimal float uses the struct return convention.  */
-      || (code == TYPE_CODE_DECFLOAT && TYPE_LENGTH (type) == 16))
+      || (code == TYPE_CODE_DECFLOAT && type->length () == 16))
     {
       /* The System V ABI says that:
 
@@ -3067,7 +3066,7 @@ i386_return_value (struct gdbarch *gdbarch, struct value *function,
 	  ULONGEST addr;
 
 	  regcache_raw_read_unsigned (regcache, I386_EAX_REGNUM, &addr);
-	  read_memory (addr, readbuf, TYPE_LENGTH (type));
+	  read_memory (addr, readbuf, type->length ());
 	}
 
       return RETURN_VALUE_ABI_RETURNS_ADDRESS;
@@ -3336,7 +3335,7 @@ i386_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
 	return bt->builtin_int64;
     }
 
-  internal_error (__FILE__, __LINE__, _("invalid regnum"));
+  internal_error (_("invalid regnum"));
 }
 
 /* Map a cooked register onto a raw register or memory.  For the i386,
@@ -3381,7 +3380,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
       status = regcache->raw_read (fpnum, raw_buf);
       if (status != REG_VALID)
 	mark_value_bytes_unavailable (result_value, 0,
-				      TYPE_LENGTH (value_type (result_value)));
+				      value_type (result_value)->length ());
       else
 	memcpy (buf, raw_buf, register_size (gdbarch, regnum));
     }
@@ -3401,7 +3400,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 	    {
 	      enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
 	      LONGEST upper, lower;
-	      int size = TYPE_LENGTH (builtin_type (gdbarch)->builtin_data_ptr);
+	      int size = builtin_type (gdbarch)->builtin_data_ptr->length ();
 
 	      lower = extract_unsigned_integer (raw_buf, 8, byte_order);
 	      upper = extract_unsigned_integer (raw_buf + 8, 8, byte_order);
@@ -3518,7 +3517,7 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 	  status = regcache->raw_read (gpnum, raw_buf);
 	  if (status != REG_VALID)
 	    mark_value_bytes_unavailable (result_value, 0,
-					  TYPE_LENGTH (value_type (result_value)));
+					  value_type (result_value)->length ());
 	  else
 	    memcpy (buf, raw_buf, 2);
 	}
@@ -3531,14 +3530,14 @@ i386_pseudo_register_read_into_value (struct gdbarch *gdbarch,
 	  status = regcache->raw_read (gpnum % 4, raw_buf);
 	  if (status != REG_VALID)
 	    mark_value_bytes_unavailable (result_value, 0,
-					  TYPE_LENGTH (value_type (result_value)));
+					  value_type (result_value)->length ());
 	  else if (gpnum >= 4)
 	    memcpy (buf, raw_buf + 1, 1);
 	  else
 	    memcpy (buf, raw_buf, 1);
 	}
       else
-	internal_error (__FILE__, __LINE__, _("invalid regnum"));
+	internal_error (_("invalid regnum"));
     }
 }
 
@@ -3582,7 +3581,7 @@ i386_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
       if (i386_bnd_regnum_p (gdbarch, regnum))
 	{
 	  ULONGEST upper, lower;
-	  int size = TYPE_LENGTH (builtin_type (gdbarch)->builtin_data_ptr);
+	  int size = builtin_type (gdbarch)->builtin_data_ptr->length ();
 	  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
 
 	  /* New values from input value.  */
@@ -3675,7 +3674,7 @@ i386_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 	  regcache->raw_write (gpnum % 4, raw_buf);
 	}
       else
-	internal_error (__FILE__, __LINE__, _("invalid regnum"));
+	internal_error (_("invalid regnum"));
     }
 }
 
@@ -3757,7 +3756,7 @@ i386_ax_pseudo_register_collect (struct gdbarch *gdbarch,
       return 0;
     }
   else
-    internal_error (__FILE__, __LINE__, _("invalid regnum"));
+    internal_error (_("invalid regnum"));
   return 1;
 }
 
@@ -3798,7 +3797,7 @@ static int
 i386_convert_register_p (struct gdbarch *gdbarch,
 			 int regnum, struct type *type)
 {
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
 
   /* Values may be spread across multiple registers.  Most debugging
      formats aren't expressive enough to specify the locations, so
@@ -3826,12 +3825,12 @@ i386_convert_register_p (struct gdbarch *gdbarch,
    return its contents in TO.  */
 
 static int
-i386_register_to_value (struct frame_info *frame, int regnum,
+i386_register_to_value (frame_info_ptr frame, int regnum,
 			struct type *type, gdb_byte *to,
 			int *optimizedp, int *unavailablep)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
 
   if (i386_fp_regnum_p (gdbarch, regnum))
     return i387_register_to_value (frame, regnum, type, to,
@@ -3866,10 +3865,10 @@ i386_register_to_value (struct frame_info *frame, int regnum,
    REGNUM in frame FRAME.  */
 
 static void
-i386_value_to_register (struct frame_info *frame, int regnum,
+i386_value_to_register (frame_info_ptr frame, int regnum,
 			struct type *type, const gdb_byte *from)
 {
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
 
   if (i386_fp_regnum_p (get_frame_arch (frame), regnum))
     {
@@ -4018,7 +4017,7 @@ i386_iterate_over_regset_sections (struct gdbarch *gdbarch,
 /* Stuff for WIN32 PE style DLL's but is pretty generic really.  */
 
 CORE_ADDR
-i386_pe_skip_trampoline_code (struct frame_info *frame,
+i386_pe_skip_trampoline_code (frame_info_ptr frame,
 			      CORE_ADDR pc, char *name)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
@@ -4049,7 +4048,7 @@ i386_pe_skip_trampoline_code (struct frame_info *frame,
    routine.  */
 
 int
-i386_sigtramp_p (struct frame_info *this_frame)
+i386_sigtramp_p (frame_info_ptr this_frame)
 {
   CORE_ADDR pc = get_frame_pc (this_frame);
   const char *name;
@@ -4085,7 +4084,7 @@ i386_print_insn (bfd_vma pc, struct disassemble_info *info)
    routine.  */
 
 static int
-i386_svr4_sigtramp_p (struct frame_info *this_frame)
+i386_svr4_sigtramp_p (frame_info_ptr this_frame)
 {
   CORE_ADDR pc = get_frame_pc (this_frame);
   const char *name;
@@ -4100,7 +4099,7 @@ i386_svr4_sigtramp_p (struct frame_info *this_frame)
    address of the associated sigcontext (ucontext) structure.  */
 
 static CORE_ADDR
-i386_svr4_sigcontext_addr (struct frame_info *this_frame)
+i386_svr4_sigcontext_addr (frame_info_ptr this_frame)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -4442,7 +4441,7 @@ i386_stap_adjust_register (struct gdbarch *gdbarch, struct stap_parse_info *p,
      specified by the "[-]N@" prefix, and it is one of the registers that
      we know has an extended variant available, then use the extended
      version of the register instead.  */
-  if (register_size (gdbarch, regnum) < TYPE_LENGTH (p->arg_type)
+  if (register_size (gdbarch, regnum) < p->arg_type->length ()
       && reg_assoc.find (regname) != reg_assoc.end ())
     return "e" + regname;
 
@@ -4656,7 +4655,7 @@ i386_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 /* Get the ARGIth function argument for the current function.  */
 
 static CORE_ADDR
-i386_fetch_pointer_argument (struct frame_info *frame, int argi, 
+i386_fetch_pointer_argument (frame_info_ptr frame, int argi, 
 			     struct type *type)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
@@ -8426,12 +8425,12 @@ i386_type_align (struct gdbarch *gdbarch, struct type *type)
     {
       if ((type->code () == TYPE_CODE_INT
 	   || type->code () == TYPE_CODE_FLT)
-	  && TYPE_LENGTH (type) > 4)
+	  && type->length () > 4)
 	return 4;
 
       /* Handle x86's funny long double.  */
       if (type->code () == TYPE_CODE_FLT
-	  && gdbarch_long_double_bit (gdbarch) == TYPE_LENGTH (type) * 8)
+	  && gdbarch_long_double_bit (gdbarch) == type->length () * 8)
 	return 4;
     }
 
@@ -9005,7 +9004,7 @@ i386_mpx_info_bounds (const char *args, int from_tty)
 
   for (i = 0; i < 4; i++)
     bt_entry[i] = read_memory_typed_address (bt_entry_addr
-					     + i * TYPE_LENGTH (data_ptr_type),
+					     + i * data_ptr_type->length (),
 					     data_ptr_type);
 
   i386_mpx_print_bounds (bt_entry);
@@ -9052,15 +9051,15 @@ i386_mpx_set_bounds (const char *args, int from_tty)
   bt_entry_addr = i386_mpx_get_bt_entry (addr, bd_base);
   for (i = 0; i < 2; i++)
     bt_entry[i] = read_memory_typed_address (bt_entry_addr
-					     + i * TYPE_LENGTH (data_ptr_type),
+					     + i * data_ptr_type->length (),
 					     data_ptr_type);
   bt_entry[0] = (uint64_t) lower;
   bt_entry[1] = ~(uint64_t) upper;
 
   for (i = 0; i < 2; i++)
     write_memory_unsigned_integer (bt_entry_addr
-				   + i * TYPE_LENGTH (data_ptr_type),
-				   TYPE_LENGTH (data_ptr_type), byte_order,
+				   + i * data_ptr_type->length (),
+				   data_ptr_type->length (), byte_order,
 				   bt_entry[i]);
 }
 
@@ -9070,7 +9069,7 @@ void _initialize_i386_tdep ();
 void
 _initialize_i386_tdep ()
 {
-  register_gdbarch_init (bfd_arch_i386, i386_gdbarch_init);
+  gdbarch_register (bfd_arch_i386, i386_gdbarch_init);
 
   /* Add the variable that controls the disassembly flavor.  */
   add_setshow_enum_cmd ("disassembly-flavor", no_class, valid_flavors,

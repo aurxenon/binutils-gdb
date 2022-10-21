@@ -553,8 +553,7 @@ psymbol_functions::find_last_source_symtab (struct objfile *ofp)
     {
       if (cs_pst->readin_p (ofp))
 	{
-	  internal_error (__FILE__, __LINE__,
-			  _("select_source_symtab: "
+	  internal_error (_("select_source_symtab: "
 			  "readin pst found and no symtabs."));
 	}
       else
@@ -1314,7 +1313,7 @@ partial_symtab::partial_symtab (const char *filename_,
 
   filename = objfile_per_bfd->intern (filename_);
 
-  if (symtab_create_debug)
+  if (symtab_create_debug >= 1)
     {
       /* Be a bit clever with debugging messages, and don't print objfile
 	 every time, only when it changes.  */
@@ -1325,13 +1324,13 @@ partial_symtab::partial_symtab (const char *filename_,
       if (last_bfd_name.empty () || last_bfd_name != this_bfd_name)
 	{
 	  last_bfd_name = this_bfd_name;
-	  gdb_printf (gdb_stdlog,
-		      "Creating one or more psymtabs for %s ...\n",
-		      this_bfd_name);
+
+	  symtab_create_debug_printf ("creating one or more psymtabs for %s",
+				      this_bfd_name);
 	}
-      gdb_printf (gdb_stdlog,
-		  "Created psymtab %s for module %s.\n",
-		  host_address_to_string (this), filename);
+
+      symtab_create_debug_printf ("created psymtab %s for module %s",
+				  host_address_to_string (this), filename);
     }
 }
 

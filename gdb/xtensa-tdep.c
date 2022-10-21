@@ -242,11 +242,7 @@ xtensa_register_name (struct gdbarch *gdbarch, int regnum)
   xtensa_gdbarch_tdep *tdep = gdbarch_tdep<xtensa_gdbarch_tdep> (gdbarch);
 
   /* Return the name stored in the register map.  */
-  if (regnum >= 0 && regnum < gdbarch_num_cooked_regs (gdbarch))
-    return tdep->regmap[regnum].name;
-
-  internal_error (__FILE__, __LINE__, _("invalid register %d"), regnum);
-  return 0;
+  return tdep->regmap[regnum].name;
 }
 
 /* Return the type of a register.  Create a new type, if necessary.  */
@@ -326,7 +322,7 @@ xtensa_register_type (struct gdbarch *gdbarch, int regnum)
       return reg->ctype;
     }
 
-  internal_error (__FILE__, __LINE__, _("invalid register number %d"), regnum);
+  internal_error (_("invalid register number %d"), regnum);
   return 0;
 }
 
@@ -619,8 +615,7 @@ xtensa_pseudo_register_read (struct gdbarch *gdbarch,
       return regcache->raw_read (regnum, buffer);
     }
   else
-    internal_error (__FILE__, __LINE__,
-		    _("invalid register number %d"), regnum);
+    internal_error (_("invalid register number %d"), regnum);
 }
 
 
@@ -708,8 +703,7 @@ xtensa_pseudo_register_write (struct gdbarch *gdbarch,
       regcache->raw_write (regnum, buffer);
     }
   else
-    internal_error (__FILE__, __LINE__,
-		    _("invalid register number %d"), regnum);
+    internal_error (_("invalid register number %d"), regnum);
 }
 
 static const reggroup *xtensa_ar_reggroup;
@@ -1029,13 +1023,13 @@ xtensa_frame_align (struct gdbarch *gdbarch, CORE_ADDR address)
 
 
 static CORE_ADDR
-xtensa_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
+xtensa_unwind_pc (struct gdbarch *gdbarch, frame_info_ptr next_frame)
 {
   gdb_byte buf[8];
   CORE_ADDR pc;
 
   DEBUGTRACE ("xtensa_unwind_pc (next_frame = %s)\n", 
-		host_address_to_string (next_frame));
+		host_address_to_string (next_frame.get ()));
 
   frame_unwind_register (next_frame, gdbarch_pc_regnum (gdbarch), buf);
   pc = extract_typed_address (buf, builtin_type (gdbarch)->builtin_func_ptr);
@@ -1047,7 +1041,7 @@ xtensa_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 
 
 static struct frame_id
-xtensa_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
+xtensa_dummy_id (struct gdbarch *gdbarch, frame_info_ptr this_frame)
 {
   CORE_ADDR pc, fp;
   xtensa_gdbarch_tdep *tdep = gdbarch_tdep<xtensa_gdbarch_tdep> (gdbarch);
@@ -1220,16 +1214,16 @@ done:
 	cache->prev_sp = SP of the previous frame.  */
 
 static void
-call0_frame_cache (struct frame_info *this_frame,
+call0_frame_cache (frame_info_ptr this_frame,
 		   xtensa_frame_cache_t *cache, CORE_ADDR pc);
 
 static void
-xtensa_window_interrupt_frame_cache (struct frame_info *this_frame,
+xtensa_window_interrupt_frame_cache (frame_info_ptr this_frame,
 				     xtensa_frame_cache_t *cache,
 				     CORE_ADDR pc);
 
 static struct xtensa_frame_cache *
-xtensa_frame_cache (struct frame_info *this_frame, void **this_cache)
+xtensa_frame_cache (frame_info_ptr this_frame, void **this_cache)
 {
   xtensa_frame_cache_t *cache;
   CORE_ADDR ra, wb, ws, pc, sp, ps;
@@ -1395,7 +1389,7 @@ This message will not be repeated in this session.\n"));
 
 
 static void
-xtensa_frame_this_id (struct frame_info *this_frame,
+xtensa_frame_this_id (frame_info_ptr this_frame,
 		      void **this_cache,
 		      struct frame_id *this_id)
 {
@@ -1409,7 +1403,7 @@ xtensa_frame_this_id (struct frame_info *this_frame,
 }
 
 static struct value *
-xtensa_frame_prev_register (struct frame_info *this_frame,
+xtensa_frame_prev_register (frame_info_ptr this_frame,
 			    void **this_cache,
 			    int regnum)
 {
@@ -1512,7 +1506,7 @@ xtensa_unwind =
 };
 
 static CORE_ADDR
-xtensa_frame_base_address (struct frame_info *this_frame, void **this_cache)
+xtensa_frame_base_address (frame_info_ptr this_frame, void **this_cache)
 {
   struct xtensa_frame_cache *cache =
     xtensa_frame_cache (this_frame, this_cache);
@@ -1537,7 +1531,7 @@ xtensa_extract_return_value (struct type *type,
 {
   struct gdbarch *gdbarch = regcache->arch ();
   bfd_byte *valbuf = (bfd_byte *) dst;
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
   ULONGEST pc, wb;
   int callsize, areg;
   int offset = 0;
@@ -1555,8 +1549,7 @@ xtensa_extract_return_value (struct type *type,
 
       /* On Xtensa, we can return up to 4 words (or 2 for call12).  */
       if (len > (callsize > 8 ? 8 : 16))
-	internal_error (__FILE__, __LINE__,
-			_("cannot extract return value of %d bytes long"),
+	internal_error (_("cannot extract return value of %d bytes long"),
 			len);
 
       /* Get the register offset of the return
@@ -1597,7 +1590,7 @@ xtensa_store_return_value (struct type *type,
   unsigned int areg;
   ULONGEST pc, wb;
   int callsize;
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
   int offset = 0;
 
   DEBUGTRACE ("xtensa_store_return_value (...)\n");
@@ -1611,9 +1604,8 @@ xtensa_store_return_value (struct type *type,
       callsize = extract_call_winsize (gdbarch, pc);
 
       if (len > (callsize > 8 ? 8 : 16))
-	internal_error (__FILE__, __LINE__,
-			_("unimplemented for this length: %s"),
-			pulongest (TYPE_LENGTH (type)));
+	internal_error (_("unimplemented for this length: %s"),
+			pulongest (type->length ()));
       areg = arreg_number (gdbarch,
 			   tdep->a0_base + 2 + callsize, wb);
 
@@ -1651,7 +1643,7 @@ xtensa_return_value (struct gdbarch *gdbarch,
   int struct_return = ((valtype->code () == TYPE_CODE_STRUCT
 			|| valtype->code () == TYPE_CODE_UNION
 			|| valtype->code () == TYPE_CODE_ARRAY)
-		       && TYPE_LENGTH (valtype) > 16);
+		       && valtype->length () > 16);
 
   if (struct_return)
     return RETURN_VALUE_STRUCT_CONVENTION;
@@ -1723,7 +1715,7 @@ xtensa_push_dummy_call (struct gdbarch *gdbarch,
 	  struct type *arg_type = check_typedef (value_type (arg));
 	  gdb_printf (gdb_stdlog, "%2d: %s %3s ", i,
 		      host_address_to_string (arg),
-		      pulongest (TYPE_LENGTH (arg_type)));
+		      pulongest (arg_type->length ()));
 	  switch (arg_type->code ())
 	    {
 	    case TYPE_CODE_INT:
@@ -1767,32 +1759,32 @@ xtensa_push_dummy_call (struct gdbarch *gdbarch,
 	case TYPE_CODE_ENUM:
 
 	  /* Cast argument to long if necessary as the mask does it too.  */
-	  if (TYPE_LENGTH (arg_type)
-	      < TYPE_LENGTH (builtin_type (gdbarch)->builtin_long))
+	  if (arg_type->length ()
+	      < builtin_type (gdbarch)->builtin_long->length ())
 	    {
 	      arg_type = builtin_type (gdbarch)->builtin_long;
 	      arg = value_cast (arg_type, arg);
 	    }
 	  /* Aligment is equal to the type length for the basic types.  */
-	  info->align = TYPE_LENGTH (arg_type);
+	  info->align = arg_type->length ();
 	  break;
 
 	case TYPE_CODE_FLT:
 
 	  /* Align doubles correctly.  */
-	  if (TYPE_LENGTH (arg_type)
-	      == TYPE_LENGTH (builtin_type (gdbarch)->builtin_double))
-	    info->align = TYPE_LENGTH (builtin_type (gdbarch)->builtin_double);
+	  if (arg_type->length ()
+	      == builtin_type (gdbarch)->builtin_double->length ())
+	    info->align = builtin_type (gdbarch)->builtin_double->length ();
 	  else
-	    info->align = TYPE_LENGTH (builtin_type (gdbarch)->builtin_long);
+	    info->align = builtin_type (gdbarch)->builtin_long->length ();
 	  break;
 
 	case TYPE_CODE_STRUCT:
 	default:
-	  info->align = TYPE_LENGTH (builtin_type (gdbarch)->builtin_long);
+	  info->align = builtin_type (gdbarch)->builtin_long->length ();
 	  break;
 	}
-      info->length = TYPE_LENGTH (arg_type);
+      info->length = arg_type->length ();
       info->contents = value_contents (arg).data ();
 
       /* Align size and onstack_size.  */
@@ -2548,7 +2540,7 @@ done:
 /* Initialize frame cache for the current frame in CALL0 ABI.  */
 
 static void
-call0_frame_cache (struct frame_info *this_frame,
+call0_frame_cache (frame_info_ptr this_frame,
 		   xtensa_frame_cache_t *cache, CORE_ADDR pc)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
@@ -2897,7 +2889,7 @@ execute_code (struct gdbarch *gdbarch, CORE_ADDR current_pc, CORE_ADDR wb)
 /* Handle Window Overflow / Underflow exception frames.  */
 
 static void
-xtensa_window_interrupt_frame_cache (struct frame_info *this_frame,
+xtensa_window_interrupt_frame_cache (frame_info_ptr this_frame,
 				     xtensa_frame_cache_t *cache,
 				     CORE_ADDR pc)
 {
@@ -3071,8 +3063,7 @@ xtensa_verify_config (struct gdbarch *gdbarch)
     log.printf (_("\n\ta0_base: No Ax registers"));
 
   if (!log.empty ())
-    internal_error (__FILE__, __LINE__,
-		    _("the following are invalid: %s"), log.c_str ());
+    internal_error (_("the following are invalid: %s"), log.c_str ());
 }
 
 

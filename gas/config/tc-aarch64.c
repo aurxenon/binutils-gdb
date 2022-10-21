@@ -30,9 +30,9 @@
 
 #ifdef OBJ_ELF
 #include "elf/aarch64.h"
-#include "dw2gencfi.h"
 #endif
 
+#include "dw2gencfi.h"
 #include "dwarf2dbg.h"
 
 /* Types of processor to assemble for.  */
@@ -61,21 +61,25 @@ static aarch64_instr_sequence *insn_sequence = NULL;
 #ifdef OBJ_ELF
 /* Pre-defined "_GLOBAL_OFFSET_TABLE_"	*/
 static symbolS *GOT_symbol;
+#endif
 
 /* Which ABI to use.  */
 enum aarch64_abi_type
 {
   AARCH64_ABI_NONE = 0,
   AARCH64_ABI_LP64 = 1,
-  AARCH64_ABI_ILP32 = 2
+  AARCH64_ABI_ILP32 = 2,
+  AARCH64_ABI_LLP64 = 3
 };
 
 #ifndef DEFAULT_ARCH
 #define DEFAULT_ARCH "aarch64"
 #endif
 
+#ifdef OBJ_ELF
 /* DEFAULT_ARCH is initialized in gas/configure.tgt.  */
 static const char *default_arch = DEFAULT_ARCH;
+#endif
 
 /* AArch64 ABI for the output file.  */
 static enum aarch64_abi_type aarch64_abi = AARCH64_ABI_NONE;
@@ -85,7 +89,10 @@ static enum aarch64_abi_type aarch64_abi = AARCH64_ABI_NONE;
    64-bit model, in which the C int type is 32-bits but the C long type
    and all pointer types are 64-bit objects (LP64).  */
 #define ilp32_p		(aarch64_abi == AARCH64_ABI_ILP32)
-#endif
+
+/* When non zero, C types int and long are 32 bit,
+   pointers, however are 64 bit */
+#define llp64_p (aarch64_abi == AARCH64_ABI_LLP64)
 
 enum vector_el_type
 {
@@ -1400,11 +1407,7 @@ s_unreq (int a ATTRIBUTE_UNUSED)
   char saved_char;
 
   name = input_line_pointer;
-
-  while (*input_line_pointer != 0
-	 && *input_line_pointer != ' ' && *input_line_pointer != '\n')
-    ++input_line_pointer;
-
+  input_line_pointer = find_end_of_line (input_line_pointer, flag_m68k_mri);
   saved_char = *input_line_pointer;
   *input_line_pointer = 0;
 
@@ -1463,7 +1466,7 @@ s_unreq (int a ATTRIBUTE_UNUSED)
 
 /* Directives: Instruction set selection.  */
 
-#ifdef OBJ_ELF
+#if defined OBJ_ELF || defined OBJ_COFF
 /* This code is to handle mapping symbols as defined in the ARM AArch64 ELF
    spec.  (See "Mapping symbols", section 4.5.4, ARM AAELF64 version 0.05).
    Note that previously, $a and $t has type STT_FUNC (BSF_OBJECT flag),
@@ -8340,7 +8343,7 @@ aarch64_handle_align (fragS * fragP)
   fix = bytes & (noop_size - 1);
   if (fix)
     {
-#ifdef OBJ_ELF
+#if defined OBJ_ELF || defined OBJ_COFF
       insert_data_mapping_symbol (MAP_INSN, fragP->fr_fix, fragP, fix);
 #endif
       memset (p, 0, fix);
@@ -8398,6 +8401,7 @@ aarch64_init_frag (fragS * fragP, int max_chars)
       break;
     }
 }
+#endif /* OBJ_ELF */
 
 /* Initialize the DWARF-2 unwind information for this procedure.  */
 
@@ -8406,7 +8410,6 @@ tc_aarch64_frame_initial_instructions (void)
 {
   cfi_add_CFA_def_cfa (REG_SP, 0);
 }
-#endif /* OBJ_ELF */
 
 /* Convert REGNAME to a DWARF-2 register number.  */
 
@@ -8443,10 +8446,10 @@ tc_aarch64_regname_to_dw2regnum (char *regname)
 int
 aarch64_dwarf2_addr_size (void)
 {
-#if defined (OBJ_MAYBE_ELF) || defined (OBJ_ELF)
   if (ilp32_p)
     return 4;
-#endif
+  else if (llp64_p)
+    return 8;
   return bfd_arch_bits_per_address (stdoutput) / 8;
 }
 
@@ -9311,8 +9314,6 @@ cons_fix_new_aarch64 (fragS * frag, int where, int size, expressionS * exp)
   fix_new_exp (frag, where, (int) size, exp, pcrel, type);
 }
 
-#ifdef OBJ_ELF
-
 /* Implement md_after_parse_args.  This is the earliest time we need to decide
    ABI.  If no -mabi specified, the ABI will be decided by target triplet.  */
 
@@ -9322,13 +9323,18 @@ aarch64_after_parse_args (void)
   if (aarch64_abi != AARCH64_ABI_NONE)
     return;
 
+#ifdef OBJ_ELF
   /* DEFAULT_ARCH will have ":32" extension if it's configured for ILP32.  */
   if (strlen (default_arch) > 7 && strcmp (default_arch + 7, ":32") == 0)
     aarch64_abi = AARCH64_ABI_ILP32;
   else
     aarch64_abi = AARCH64_ABI_LP64;
+#else
+  aarch64_abi = AARCH64_ABI_LLP64;
+#endif
 }
 
+#ifdef OBJ_ELF
 const char *
 elf64_aarch64_target_format (void)
 {
@@ -9350,6 +9356,12 @@ void
 aarch64elf_frob_symbol (symbolS * symp, int *puntp)
 {
   elf_frob_symbol (symp, puntp);
+}
+#elif defined OBJ_COFF
+const char *
+coff_aarch64_target_format (void)
+{
+  return "pe-aarch64-little";
 }
 #endif
 
@@ -9666,7 +9678,12 @@ md_begin (void)
   cpu_variant = *mcpu_cpu_opt;
 
   /* Record the CPU type.  */
-  mach = ilp32_p ? bfd_mach_aarch64_ilp32 : bfd_mach_aarch64;
+  if(ilp32_p)
+    mach = bfd_mach_aarch64_ilp32;
+  else if (llp64_p)
+    mach = bfd_mach_aarch64_llp64;
+  else
+    mach = bfd_mach_aarch64;
 
   bfd_set_arch_mach (stdoutput, TARGET_ARCH, mach);
 }
@@ -10234,8 +10251,12 @@ struct aarch64_option_abi_value_table
 };
 
 static const struct aarch64_option_abi_value_table aarch64_abis[] = {
+#ifdef OBJ_ELF
   {"ilp32",		AARCH64_ABI_ILP32},
   {"lp64",		AARCH64_ABI_LP64},
+#else
+  {"llp64",		AARCH64_ABI_LLP64},
+#endif
 };
 
 static int
@@ -10261,10 +10282,8 @@ aarch64_parse_abi (const char *str)
 }
 
 static struct aarch64_long_option_table aarch64_long_opts[] = {
-#ifdef OBJ_ELF
   {"mabi=", N_("<abi name>\t  specify for ABI <abi name>"),
    aarch64_parse_abi, NULL},
-#endif /* OBJ_ELF */
   {"mcpu=", N_("<cpu name>\t  assemble for CPU <cpu name>"),
    aarch64_parse_cpu, NULL},
   {"march=", N_("<arch name>\t  assemble for architecture <arch name>"),
@@ -10378,8 +10397,7 @@ s_aarch64_cpu (int ignored ATTRIBUTE_UNUSED)
   size_t optlen;
 
   name = input_line_pointer;
-  while (*input_line_pointer && !ISSPACE (*input_line_pointer))
-    input_line_pointer++;
+  input_line_pointer = find_end_of_line (input_line_pointer, flag_m68k_mri);
   saved_char = *input_line_pointer;
   *input_line_pointer = 0;
 
@@ -10424,8 +10442,7 @@ s_aarch64_arch (int ignored ATTRIBUTE_UNUSED)
   size_t optlen;
 
   name = input_line_pointer;
-  while (*input_line_pointer && !ISSPACE (*input_line_pointer))
-    input_line_pointer++;
+  input_line_pointer = find_end_of_line (input_line_pointer, flag_m68k_mri);
   saved_char = *input_line_pointer;
   *input_line_pointer = 0;
 
@@ -10464,10 +10481,9 @@ static void
 s_aarch64_arch_extension (int ignored ATTRIBUTE_UNUSED)
 {
   char saved_char;
-  char *ext = input_line_pointer;;
+  char *ext = input_line_pointer;
 
-  while (*input_line_pointer && !ISSPACE (*input_line_pointer))
-    input_line_pointer++;
+  input_line_pointer = find_end_of_line (input_line_pointer, flag_m68k_mri);
   saved_char = *input_line_pointer;
   *input_line_pointer = 0;
 

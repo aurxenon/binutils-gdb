@@ -93,6 +93,9 @@ enum csky_regnum
   CSKY_PSR_REGNUM = CSKY_CR0_REGNUM,
 
   CSKY_MAX_REGISTER_SIZE = 16,
+
+  /* Actually, the max regs number should be 1187. But if the
+     gdb stub does not send a tdesc-xml file to gdb, 253 works. */
   CSKY_MAX_REGS = 253
 };
 
@@ -375,5 +378,16 @@ enum csky_regnum
 
 #define CSKY_MOVI_R7_173 0x00adea07
 #define CSKY_TRAP_0 0x2020c000
+
+/* Sizeof (tls) */
+#define CSKY_SIGCONTEXT_PT_REGS_TLS  4
+
+/* Macro for kernel 4.x  */
+#define CSKY_MOVI_R7_139 0x008bea07
+
+/* Macro for check long branch.  */
+#define CSKY_JMPI_PC_4      0x1eac0
+#define CSKY_LRW_T1_PC_8    0x2ea8d
+#define CSKY_JMP_T1_VS_NOP  0x6c037834
 
 #endif

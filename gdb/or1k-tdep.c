@@ -247,7 +247,7 @@ or1k_return_value (struct gdbarch *gdbarch, struct value *functype,
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   enum type_code rv_type = valtype->code ();
-  unsigned int rv_size = TYPE_LENGTH (valtype);
+  unsigned int rv_size = valtype->length ();
   or1k_gdbarch_tdep *tdep = gdbarch_tdep<or1k_gdbarch_tdep> (gdbarch);
   int bpw = tdep->bytes_per_word;
 
@@ -379,7 +379,7 @@ or1k_delay_slot_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 
 static int
 or1k_single_step_through_delay (struct gdbarch *gdbarch,
-				struct frame_info *this_frame)
+				frame_info_ptr this_frame)
 {
   ULONGEST val;
   CORE_ADDR ppc;
@@ -559,7 +559,7 @@ or1k_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
 /* Implement the unwind_pc gdbarch method.  */
 
 static CORE_ADDR
-or1k_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
+or1k_unwind_pc (struct gdbarch *gdbarch, frame_info_ptr next_frame)
 {
   CORE_ADDR pc;
 
@@ -579,7 +579,7 @@ or1k_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 /* Implement the unwind_sp gdbarch method.  */
 
 static CORE_ADDR
-or1k_unwind_sp (struct gdbarch *gdbarch, struct frame_info *next_frame)
+or1k_unwind_sp (struct gdbarch *gdbarch, frame_info_ptr next_frame)
 {
   CORE_ADDR sp;
 
@@ -663,7 +663,7 @@ or1k_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
       struct value *arg = args[argnum];
       struct type *arg_type = check_typedef (value_type (arg));
-      int len = TYPE_LENGTH (arg_type);
+      int len = arg_type->length ();
       enum type_code typecode = arg_type->code ();
 
       if (func_type->has_varargs () && argnum >= func_type->num_fields ())
@@ -753,7 +753,7 @@ or1k_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
     {
       struct value *arg = args[argnum];
       struct type *arg_type = check_typedef (value_type (arg));
-      int len = TYPE_LENGTH (arg_type);
+      int len = arg_type->length ();
       enum type_code typecode = arg_type->code ();
 
       if ((TYPE_CODE_STRUCT == typecode) || (TYPE_CODE_UNION == typecode)
@@ -785,7 +785,7 @@ or1k_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
       struct value *arg = args[argnum];
       struct type *arg_type = check_typedef (value_type (arg));
-      int len = TYPE_LENGTH (arg_type);
+      int len = arg_type->length ();
       enum type_code typecode = arg_type->code ();
       /* The EABI passes structures that do not fit in a register by
 	 reference.  In all other cases, pass the structure by value.  */
@@ -890,7 +890,7 @@ or1k_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
    Reportedly, this is only valid for frames less than 0x7fff in size.  */
 
 static struct trad_frame_cache *
-or1k_frame_cache (struct frame_info *this_frame, void **prologue_cache)
+or1k_frame_cache (frame_info_ptr this_frame, void **prologue_cache)
 {
   struct gdbarch *gdbarch;
   struct trad_frame_cache *info;
@@ -1103,7 +1103,7 @@ or1k_frame_cache (struct frame_info *this_frame, void **prologue_cache)
 /* Implement the this_id function for the stub unwinder.  */
 
 static void
-or1k_frame_this_id (struct frame_info *this_frame,
+or1k_frame_this_id (frame_info_ptr this_frame,
 		    void **prologue_cache, struct frame_id *this_id)
 {
   struct trad_frame_cache *info = or1k_frame_cache (this_frame,
@@ -1115,7 +1115,7 @@ or1k_frame_this_id (struct frame_info *this_frame,
 /* Implement the prev_register function for the stub unwinder.  */
 
 static struct value *
-or1k_frame_prev_register (struct frame_info *this_frame,
+or1k_frame_prev_register (frame_info_ptr this_frame,
 			  void **prologue_cache, int regnum)
 {
   struct trad_frame_cache *info = or1k_frame_cache (this_frame,

@@ -290,6 +290,18 @@ extern PyTypeObject frame_object_type
 extern PyTypeObject thread_object_type
     CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("thread_object");
 
+/* Ensure that breakpoint_object_type is initialized and return true.  If
+   breakpoint_object_type can't be initialized then set a suitable Python
+   error and return false.
+
+   This function needs to be called from any gdbpy_initialize_* function
+   that wants to reference breakpoint_object_type.  After all the
+   gdbpy_initialize_* functions have been called then breakpoint_object_type
+   is guaranteed to have been initialized, and this function does not need
+   calling before referencing breakpoint_object_type.  */
+
+extern bool gdbpy_breakpoint_init_breakpoint_type ();
+
 struct gdbpy_breakpoint_object
 {
   PyObject_HEAD
@@ -366,7 +378,7 @@ extern enum ext_lang_rc gdbpy_apply_val_pretty_printer
    const struct language_defn *language);
 extern enum ext_lang_bt_status gdbpy_apply_frame_filter
   (const struct extension_language_defn *,
-   struct frame_info *frame, frame_filter_flags flags,
+   frame_info_ptr frame, frame_filter_flags flags,
    enum ext_lang_frame_args args_type,
    struct ui_out *out, int frame_low, int frame_high);
 extern void gdbpy_preserve_values (const struct extension_language_defn *,
@@ -427,7 +439,7 @@ PyObject *block_to_block_object (const struct block *block,
 PyObject *value_to_value_object (struct value *v);
 PyObject *value_to_value_object_no_release (struct value *v);
 PyObject *type_to_type_object (struct type *);
-PyObject *frame_info_to_frame_object (struct frame_info *frame);
+PyObject *frame_info_to_frame_object (frame_info_ptr frame);
 PyObject *symtab_to_linetable_object (PyObject *symtab);
 gdbpy_ref<> pspace_to_pspace_object (struct program_space *);
 PyObject *pspy_get_printers (PyObject *, void *);
@@ -467,7 +479,7 @@ struct value *convert_value_from_python (PyObject *obj);
 struct type *type_object_to_type (PyObject *obj);
 struct symtab *symtab_object_to_symtab (PyObject *obj);
 struct symtab_and_line *sal_object_to_symtab_and_line (PyObject *obj);
-struct frame_info *frame_object_to_frame_info (PyObject *frame_obj);
+frame_info_ptr frame_object_to_frame_info (PyObject *frame_obj);
 struct gdbarch *arch_object_to_gdbarch (PyObject *obj);
 
 /* Convert Python object OBJ to a program_space pointer.  OBJ must be a
@@ -819,7 +831,8 @@ typedef std::unique_ptr<Py_buffer, Py_buffer_deleter> Py_buffer_up;
 
    If a register is parsed successfully then *REG_NUM will have been
    updated, and true is returned.  Otherwise the contents of *REG_NUM are
-   undefined, and false is returned.
+   undefined, and false is returned.  When false is returned, the
+   Python error is set.
 
    The PYO_REG_ID object can be a string, the name of the register.  This
    is the slowest approach as GDB has to map the name to a number for each

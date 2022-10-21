@@ -137,20 +137,17 @@ struct entry_info
 
 #define SECT_OFF_DATA(objfile) \
      ((objfile->sect_index_data == -1) \
-      ? (internal_error (__FILE__, __LINE__, \
-			 _("sect_index_data not initialized")), -1)	\
+      ? (internal_error (_("sect_index_data not initialized")), -1)	\
       : objfile->sect_index_data)
 
 #define SECT_OFF_RODATA(objfile) \
      ((objfile->sect_index_rodata == -1) \
-      ? (internal_error (__FILE__, __LINE__, \
-			 _("sect_index_rodata not initialized")), -1)	\
+      ? (internal_error (_("sect_index_rodata not initialized")), -1)	\
       : objfile->sect_index_rodata)
 
 #define SECT_OFF_TEXT(objfile) \
      ((objfile->sect_index_text == -1) \
-      ? (internal_error (__FILE__, __LINE__, \
-			 _("sect_index_text not initialized")), -1)	\
+      ? (internal_error (_("sect_index_text not initialized")), -1)	\
       : objfile->sect_index_text)
 
 /* Sometimes the .bss section is missing from the objfile, so we don't
@@ -401,7 +398,7 @@ struct objfile
 private:
 
   /* The only way to create an objfile is to call objfile::make.  */
-  objfile (bfd *, const char *, objfile_flags);
+  objfile (gdb_bfd_ref_ptr, const char *, objfile_flags);
 
 public:
 
@@ -414,8 +411,8 @@ public:
   ~objfile ();
 
   /* Create an objfile.  */
-  static objfile *make (bfd *bfd_, const char *name_, objfile_flags flags_,
-			objfile *parent = nullptr);
+  static objfile *make (gdb_bfd_ref_ptr bfd_, const char *name_,
+			objfile_flags flags_, objfile *parent = nullptr);
 
   /* Remove an objfile from the current program space, and free
      it.  */
@@ -597,7 +594,7 @@ public:
        section.  */
     gdb_assert (section->owner == nullptr || section->owner == this->obfd);
 
-    int idx = gdb_bfd_section_index (this->obfd, section);
+    int idx = gdb_bfd_section_index (this->obfd.get (), section);
     return this->section_offsets[idx];
   }
 
@@ -608,7 +605,7 @@ public:
        section.  */
     gdb_assert (section->owner == nullptr || section->owner == this->obfd);
 
-    int idx = gdb_bfd_section_index (this->obfd, section);
+    int idx = gdb_bfd_section_index (this->obfd.get (), section);
     this->section_offsets[idx] = offset;
   }
 
@@ -651,12 +648,17 @@ public:
   /* The object file's BFD.  Can be null if the objfile contains only
      minimal symbols, e.g. the run time common symbols for SunOS4.  */
 
-  bfd *obfd;
+  gdb_bfd_ref_ptr obfd;
 
-  /* The per-BFD data.  Note that this is treated specially if OBFD
-     is NULL.  */
+  /* The per-BFD data.  */
 
   struct objfile_per_bfd_storage *per_bfd = nullptr;
+
+  /* In some cases, the per_bfd object is owned by this objfile and
+     not by the BFD itself.  In this situation, this holds the owning
+     pointer.  */
+
+  std::unique_ptr<objfile_per_bfd_storage> per_bfd_storage;
 
   /* The modification timestamp of the object file, as of the last time
      we read its symbols.  */
@@ -666,7 +668,7 @@ public:
   /* Obstack to hold objects that should be freed when we load a new symbol
      table from this object file.  */
 
-  struct obstack objfile_obstack {};
+  auto_obstack objfile_obstack;
 
   /* Structure which keeps track of functions that manipulate objfile's
      of the same type as this objfile.  I.e. the function to read partial

@@ -109,6 +109,7 @@ if [gas_32_check] then {
     run_list_test "cr-err" ""
     run_dump_test "cdr"
     run_dump_test "svme"
+    run_dump_test "svme16"
     run_dump_test "amdfam10"
     run_dump_test "ssse3"
     run_dump_test "rep"
@@ -168,6 +169,7 @@ if [gas_32_check] then {
     run_dump_test "simd"
     run_dump_test "simd-intel"
     run_dump_test "simd-suffix"
+    run_dump_test "simd16"
     run_dump_test "mem"
     run_dump_test "mem-intel"
     run_dump_test "reg"
@@ -1345,6 +1347,7 @@ if [gas_64_check] then {
 	run_dump_test ehinterp
     }
     run_dump_test pr27198
+    run_dump_test pr29483
 
     set ASFLAGS "$old_ASFLAGS --64"
 

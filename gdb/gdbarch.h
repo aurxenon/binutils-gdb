@@ -29,6 +29,7 @@
 #include "osabi.h"
 #include "displaced-stepping.h"
 #include "gdbsupport/gdb-checked-static-cast.h"
+#include "registry.h"
 
 struct floatformat;
 struct ui_file;
@@ -250,17 +251,8 @@ struct gdbarch_info
 
   bfd *abfd = nullptr;
 
-  union
-    {
-      /* Architecture-specific target description data.  Numerous targets
-	 need only this, so give them an easy way to hold it.  */
-      struct tdesc_arch_data *tdesc_data;
-
-      /* SPU file system ID.  This is a single integer, so using the
-	 generic form would only complicate code.  Other targets may
-	 reuse this member if suitable.  */
-      int *id;
-    };
+  /* Architecture-specific target description data.  */
+  struct tdesc_arch_data *tdesc_data;
 
   enum gdb_osabi osabi = GDB_OSABI_UNKNOWN;
 
@@ -270,12 +262,9 @@ struct gdbarch_info
 typedef struct gdbarch *(gdbarch_init_ftype) (struct gdbarch_info info, struct gdbarch_list *arches);
 typedef void (gdbarch_dump_tdep_ftype) (struct gdbarch *gdbarch, struct ui_file *file);
 
-/* DEPRECATED - use gdbarch_register() */
-extern void register_gdbarch_init (enum bfd_architecture architecture, gdbarch_init_ftype *);
-
 extern void gdbarch_register (enum bfd_architecture architecture,
-			      gdbarch_init_ftype *,
-			      gdbarch_dump_tdep_ftype *);
+			      gdbarch_init_ftype *init,
+			      gdbarch_dump_tdep_ftype *dump_tdep = nullptr);
 
 
 /* Return a vector of the valid architecture names.  Since architectures are
@@ -351,32 +340,13 @@ extern struct gdbarch *gdbarch_find_by_info (struct gdbarch_info info);
 extern void set_target_gdbarch (struct gdbarch *gdbarch);
 
 
-/* Register per-architecture data-pointer.
-
-   Reserve space for a per-architecture data-pointer.  An identifier
-   for the reserved data-pointer is returned.  That identifer should
-   be saved in a local static variable.
-
-   Memory for the per-architecture data shall be allocated using
-   gdbarch_obstack_zalloc.  That memory will be deleted when the
-   corresponding architecture object is deleted.
-
-   When a previously created architecture is re-selected, the
-   per-architecture data-pointer for that previous architecture is
-   restored.  INIT() is not re-called.
-
-   Multiple registrarants for any architecture are allowed (and
-   strongly encouraged).  */
-
-struct gdbarch_data;
-
-typedef void *(gdbarch_data_pre_init_ftype) (struct obstack *obstack);
-extern struct gdbarch_data *gdbarch_data_register_pre_init (gdbarch_data_pre_init_ftype *init);
-typedef void *(gdbarch_data_post_init_ftype) (struct gdbarch *gdbarch);
-extern struct gdbarch_data *gdbarch_data_register_post_init (gdbarch_data_post_init_ftype *init);
-
-extern void *gdbarch_data (struct gdbarch *gdbarch, struct gdbarch_data *);
-
+/* A registry adaptor for gdbarch.  This arranges to store the
+   registry in the gdbarch.  */
+template<>
+struct registry_accessor<gdbarch>
+{
+  static registry<gdbarch> *get (gdbarch *arch);
+};
 
 /* Set the dynamic target-system-dependent parameters (architecture,
    byte-order, ...) using information found in the BFD.  */

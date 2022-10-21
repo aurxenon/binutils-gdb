@@ -302,9 +302,9 @@ static initializer cpu_flag_init[] =
   { "CPU_CLDEMOTE_FLAGS",
     "CpuCLDEMOTE" },
   { "CPU_AMX_INT8_FLAGS",
-    "CpuAMX_INT8" },
+    "CPU_AMX_TILE_FLAGS|CpuAMX_INT8" },
   { "CPU_AMX_BF16_FLAGS",
-    "CpuAMX_BF16" },
+    "CPU_AMX_TILE_FLAGS|CpuAMX_BF16" },
   { "CPU_AMX_TILE_FLAGS",
     "CpuAMX_TILE" },
   { "CPU_MOVDIRI_FLAGS",
@@ -370,7 +370,7 @@ static initializer cpu_flag_init[] =
   { "CPU_ANY_AVX_FLAGS",
     "CPU_ANY_AVX2_FLAGS|CpuF16C|CpuFMA|CpuFMA4|CpuXOP|CpuAVX" },
   { "CPU_ANY_AVX2_FLAGS",
-    "CPU_ANY_AVX512F_FLAGS|CpuAVX2" },
+    "CPU_ANY_AVX512F_FLAGS|CpuAVX2|CpuAVX_VNNI" },
   { "CPU_ANY_AVX512F_FLAGS",
     "CpuAVX512F|CpuAVX512CD|CpuAVX512ER|CpuAVX512PF|CpuAVX512DQ|CPU_ANY_AVX512BW_FLAGS|CpuAVX512VL|CpuAVX512IFMA|CpuAVX512VBMI|CpuAVX512_4FMAPS|CpuAVX512_4VNNIW|CpuAVX512_VPOPCNTDQ|CpuAVX512_VBMI2|CpuAVX512_VNNI|CpuAVX512_BITALG|CpuAVX512_BF16|CpuAVX512_VP2INTERSECT" },
   { "CPU_ANY_AVX512CD_FLAGS",
@@ -706,14 +706,11 @@ static bitfield opcode_modifiers[] =
   BITFIELD (RegKludge),
   BITFIELD (Implicit1stXmm0),
   BITFIELD (PrefixOk),
-  BITFIELD (ToDword),
-  BITFIELD (ToQword),
   BITFIELD (AddrPrefixOpReg),
   BITFIELD (IsPrefix),
   BITFIELD (ImmExt),
   BITFIELD (NoRex64),
   BITFIELD (Ugh),
-  BITFIELD (PseudoVexPrefix),
   BITFIELD (Vex),
   BITFIELD (VexVVVV),
   BITFIELD (VexW),
@@ -822,13 +819,13 @@ struct template_param {
 };
 
 struct template {
-  const struct template *next;
+  struct template *next;
   const char *name;
   const struct template_instance *instances;
   const struct template_param *params;
 };
 
-static const struct template *templates;
+static struct template *templates;
 
 static int
 compare (const void *x, const void *y)
@@ -1111,18 +1108,21 @@ output_opcode_modifier (FILE *table, bitfield *modifier, unsigned int size)
   fprintf (table, "%d },\n", modifier[i].value);
 }
 
+/* Returns LOG2 of element size.  */
 static int
-adjust_broadcast_modifier (char **opnd)
+get_element_size (char **opnd, int lineno)
 {
   char *str, *next, *last, *op;
-  int bcst_type = INT_MAX;
+  const char *full = opnd[0];
+  int elem_size = INT_MAX;
 
-  /* Skip the immediate operand.  */
-  op = opnd[0];
-  if (strcasecmp(op, "Imm8") == 0)
-    op = opnd[1];
+  /* Find the memory operand.  */
+  while (full != NULL && strstr(full, "BaseIndex") == NULL)
+    full = *++opnd;
+  if (full == NULL)
+    fail (_("%s: %d: no memory operand\n"), filename, lineno);
 
-  op = xstrdup (op);
+  op = xstrdup (full);
   last = op + strlen (op);
   for (next = op; next && next < last; )
     {
@@ -1131,34 +1131,34 @@ adjust_broadcast_modifier (char **opnd)
 	{
 	  if (strcasecmp(str, "Byte") == 0)
 	    {
-	      /* The smalest broadcast type, no need to check
+	      /* The smallest element size, no need to check
 		 further.  */
-	      bcst_type = BYTE_BROADCAST;
+	      elem_size = 0;
 	      break;
 	    }
 	  else if (strcasecmp(str, "Word") == 0)
 	    {
-	      if (bcst_type > WORD_BROADCAST)
-		bcst_type = WORD_BROADCAST;
+	      if (elem_size > 1)
+		elem_size = 1;
 	    }
 	  else if (strcasecmp(str, "Dword") == 0)
 	    {
-	      if (bcst_type > DWORD_BROADCAST)
-		bcst_type = DWORD_BROADCAST;
+	      if (elem_size > 2)
+		elem_size = 2;
 	    }
 	  else if (strcasecmp(str, "Qword") == 0)
 	    {
-	      if (bcst_type > QWORD_BROADCAST)
-		bcst_type = QWORD_BROADCAST;
+	      if (elem_size > 3)
+		elem_size = 3;
 	    }
 	}
     }
   free (op);
 
-  if (bcst_type == INT_MAX)
-    fail (_("unknown broadcast operand: %s\n"), op);
+  if (elem_size == INT_MAX)
+    fail (_("%s: %d: unknown element size: %s\n"), filename, lineno, full);
 
-  return bcst_type;
+  return elem_size;
 }
 
 static void
@@ -1185,7 +1185,9 @@ process_i386_opcode_modifier (FILE *table, char *mod, unsigned int space,
 	    {
 	      int val = 1;
 	      if (strcasecmp(str, "Broadcast") == 0)
-		val = adjust_broadcast_modifier (opnd);
+		val = get_element_size (opnd, lineno) + BYTE_BROADCAST;
+	      else if (strcasecmp(str, "Disp8MemShift") == 0)
+		val = get_element_size (opnd, lineno);
 
 	      set_bitfield (str, modifiers, val, ARRAY_SIZE (modifiers),
 			    lineno);
@@ -1504,18 +1506,40 @@ static void
 parse_template (char *buf, int lineno)
 {
   char sep, *end, *name;
-  struct template *tmpl = xmalloc (sizeof (*tmpl));
+  struct template *tmpl;
   struct template_instance *last_inst = NULL;
 
   buf = remove_leading_whitespaces (buf + 1);
   end = strchr (buf, ':');
   if (end == NULL)
-    fail ("%s: %d: missing ':'\n", filename, lineno);
+    {
+      struct template *prev = NULL;
+
+      end = strchr (buf, '>');
+      if (end == NULL)
+	fail ("%s: %d: missing ':' or '>'\n", filename, lineno);
+      if (*remove_leading_whitespaces (end + 1))
+	fail ("%s: %d: malformed template purge\n", filename, lineno);
+      *end = '\0';
+      remove_trailing_whitespaces (buf);
+      /* Don't bother freeing the various structures.  */
+      for (tmpl = templates; tmpl != NULL; tmpl = (prev = tmpl)->next)
+	if (!strcmp (buf, tmpl->name))
+	  break;
+      if (tmpl == NULL)
+	fail ("%s: %d: no template '%s'\n", filename, lineno, buf);
+      if (prev)
+	prev->next = tmpl->next;
+      else
+	templates = tmpl->next;
+      return;
+    }
   *end++ = '\0';
   remove_trailing_whitespaces (buf);
 
   if (*buf == '\0')
     fail ("%s: %d: missing template identifier\n", filename, lineno);
+  tmpl = xmalloc (sizeof (*tmpl));
   tmpl->name = xstrdup (buf);
 
   tmpl->params = NULL;
@@ -1764,17 +1788,36 @@ process_i386_opcodes (FILE *table)
       if (fgets (buf, sizeof (buf), fp) == NULL)
 	break;
 
-      lineno++;
-
       p = remove_leading_whitespaces (buf);
 
-      /* Skip comments.  */
-      str = strstr (p, "//");
-      if (str != NULL)
-	str[0] = '\0';
+      for ( ; ; )
+	{
+	  lineno++;
 
-      /* Remove trailing white spaces.  */
-      remove_trailing_whitespaces (p);
+	  /* Skip comments.  */
+	  str = strstr (p, "//");
+	  if (str != NULL)
+	    {
+	      str[0] = '\0';
+	      remove_trailing_whitespaces (p);
+	      break;
+	    }
+
+	  /* Look for line continuation character.  */
+	  remove_trailing_whitespaces (p);
+	  j = strlen (buf);
+	  if (!j || buf[j - 1] != '+')
+	    break;
+	  if (j >= sizeof (buf) - 1)
+	    fail (_("%s: %d: (continued) line too long\n"), filename, lineno);
+
+	  if (fgets (buf + j - 1, sizeof (buf) - j + 1, fp) == NULL)
+	    {
+	      fprintf (stderr, "%s: Line continuation on last line?\n",
+		       filename);
+	      break;
+	    }
+	}
 
       switch (p[0])
 	{

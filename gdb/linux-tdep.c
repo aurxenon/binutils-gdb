@@ -193,25 +193,22 @@ enum
     LINUX_SIGRTMAX = 64,
   };
 
-static struct gdbarch_data *linux_gdbarch_data_handle;
-
 struct linux_gdbarch_data
 {
-  struct type *siginfo_type;
-  int num_disp_step_buffers;
+  struct type *siginfo_type = nullptr;
+  int num_disp_step_buffers = 0;
 };
 
-static void *
-init_linux_gdbarch_data (struct obstack *obstack)
-{
-  return obstack_zalloc<linux_gdbarch_data> (obstack);
-}
+static const registry<gdbarch>::key<linux_gdbarch_data>
+     linux_gdbarch_data_handle;
 
 static struct linux_gdbarch_data *
 get_linux_gdbarch_data (struct gdbarch *gdbarch)
 {
-  return ((struct linux_gdbarch_data *)
-	  gdbarch_data (gdbarch, linux_gdbarch_data_handle));
+  struct linux_gdbarch_data *result = linux_gdbarch_data_handle.get (gdbarch);
+  if (result == nullptr)
+    result = linux_gdbarch_data_handle.emplace (gdbarch);
+  return result;
 }
 
 /* Linux-specific cached data.  This is used by GDB for caching
@@ -296,21 +293,21 @@ linux_get_siginfo_type_with_fields (struct gdbarch *gdbarch,
 
   /* __pid_t */
   pid_type = arch_type (gdbarch, TYPE_CODE_TYPEDEF,
-			TYPE_LENGTH (int_type) * TARGET_CHAR_BIT, "__pid_t");
-  TYPE_TARGET_TYPE (pid_type) = int_type;
+			int_type->length () * TARGET_CHAR_BIT, "__pid_t");
+  pid_type->set_target_type (int_type);
   pid_type->set_target_is_stub (true);
 
   /* __uid_t */
   uid_type = arch_type (gdbarch, TYPE_CODE_TYPEDEF,
-			TYPE_LENGTH (uint_type) * TARGET_CHAR_BIT, "__uid_t");
-  TYPE_TARGET_TYPE (uid_type) = uint_type;
+			uint_type->length () * TARGET_CHAR_BIT, "__uid_t");
+  uid_type->set_target_type (uint_type);
   uid_type->set_target_is_stub (true);
 
   /* __clock_t */
   clock_type = arch_type (gdbarch, TYPE_CODE_TYPEDEF,
-			  TYPE_LENGTH (long_type) * TARGET_CHAR_BIT,
+			  long_type->length () * TARGET_CHAR_BIT,
 			  "__clock_t");
-  TYPE_TARGET_TYPE (clock_type) = long_type;
+  clock_type->set_target_type (long_type);
   clock_type->set_target_is_stub (true);
 
   /* _sifields */
@@ -397,7 +394,7 @@ linux_get_siginfo_type_with_fields (struct gdbarch *gdbarch,
   append_composite_type_field (siginfo_type, "si_code", int_type);
   append_composite_type_field_aligned (siginfo_type,
 				       "_sifields", sifields_type,
-				       TYPE_LENGTH (long_type));
+				       long_type->length ());
 
   linux_gdbarch_data->siginfo_type = siginfo_type;
 
@@ -420,10 +417,9 @@ int
 linux_is_uclinux (void)
 {
   CORE_ADDR dummy;
-  target_ops *target = current_inferior ()->top_target ();
 
-  return (target_auxv_search (target, AT_NULL, &dummy) > 0
-	  && target_auxv_search (target, AT_PAGESZ, &dummy) == 0);
+  return (target_auxv_search (AT_NULL, &dummy) > 0
+	  && target_auxv_search (AT_PAGESZ, &dummy) == 0);
 }
 
 static int
@@ -816,7 +812,7 @@ linux_info_proc (struct gdbarch *gdbarch, const char *args,
   int status_f = (what == IP_STATUS || what == IP_ALL);
   int stat_f = (what == IP_STAT || what == IP_ALL);
   char filename[100];
-  int target_errno;
+  fileio_error target_errno;
 
   if (args && isdigit (args[0]))
     {
@@ -1718,11 +1714,11 @@ linux_make_mappings_callback (ULONGEST vaddr, ULONGEST size,
   ++map_data->file_count;
 
   pack_long (buf, map_data->long_type, vaddr);
-  obstack_grow (map_data->data_obstack, buf, TYPE_LENGTH (map_data->long_type));
+  obstack_grow (map_data->data_obstack, buf, map_data->long_type->length ());
   pack_long (buf, map_data->long_type, vaddr + size);
-  obstack_grow (map_data->data_obstack, buf, TYPE_LENGTH (map_data->long_type));
+  obstack_grow (map_data->data_obstack, buf, map_data->long_type->length ());
   pack_long (buf, map_data->long_type, offset);
-  obstack_grow (map_data->data_obstack, buf, TYPE_LENGTH (map_data->long_type));
+  obstack_grow (map_data->data_obstack, buf, map_data->long_type->length ());
 
   obstack_grow_str0 (map_data->filename_obstack, filename);
 
@@ -1751,11 +1747,11 @@ linux_make_mappings_corefile_notes (struct gdbarch *gdbarch, bfd *obfd,
   mapping_data.long_type = long_type;
 
   /* Reserve space for the count.  */
-  obstack_blank (&data_obstack, TYPE_LENGTH (long_type));
+  obstack_blank (&data_obstack, long_type->length ());
   /* We always write the page size as 1 since we have no good way to
      determine the correct value.  */
   pack_long (buf, long_type, 1);
-  obstack_grow (&data_obstack, buf, TYPE_LENGTH (long_type));
+  obstack_grow (&data_obstack, buf, long_type->length ());
 
   linux_find_memory_regions_full (gdbarch, 
 				  dump_note_entry_p,
@@ -1797,12 +1793,12 @@ linux_get_siginfo_data (thread_info *thread, struct gdbarch *gdbarch)
 
   siginfo_type = gdbarch_get_siginfo_type (gdbarch);
 
-  gdb::byte_vector buf (TYPE_LENGTH (siginfo_type));
+  gdb::byte_vector buf (siginfo_type->length ());
 
   bytes_read = target_read (current_inferior ()->top_target (),
 			    TARGET_OBJECT_SIGNAL_INFO, NULL,
-			    buf.data (), 0, TYPE_LENGTH (siginfo_type));
-  if (bytes_read != TYPE_LENGTH (siginfo_type))
+			    buf.data (), 0, siginfo_type->length ());
+  if (bytes_read != siginfo_type->length ())
     buf.clear ();
 
   return buf;
@@ -2382,8 +2378,7 @@ linux_vsyscall_range_raw (struct gdbarch *gdbarch, struct mem_range *range)
   char filename[100];
   long pid;
 
-  if (target_auxv_search (current_inferior ()->top_target (),
-			  AT_SYSINFO_EHDR, &range->start) <= 0)
+  if (target_auxv_search (AT_SYSINFO_EHDR, &range->start) <= 0)
     return 0;
 
   /* It doesn't make sense to access the host's /proc when debugging a
@@ -2573,8 +2568,7 @@ linux_displaced_step_location (struct gdbarch *gdbarch)
      local-store address and is thus not usable as displaced stepping
      location.  The auxiliary vector gets us the PowerPC-side entry
      point address instead.  */
-  if (target_auxv_search (current_inferior ()->top_target (),
-			  AT_ENTRY, &addr) <= 0)
+  if (target_auxv_search (AT_ENTRY, &addr) <= 0)
     throw_error (NOT_SUPPORTED_ERROR,
 		 _("Cannot find AT_ENTRY auxiliary vector entry."));
 
@@ -2661,13 +2655,15 @@ linux_displaced_step_restore_all_in_ptid (inferior *parent_inf, ptid_t ptid)
   per_inferior->disp_step_bufs->restore_in_ptid (ptid);
 }
 
-/* See linux-tdep.h.  */
+/* Helper for linux_get_hwcap and linux_get_hwcap2.  */
 
-CORE_ADDR
-linux_get_hwcap (struct target_ops *target)
+static CORE_ADDR
+linux_get_hwcap_helper (const gdb::optional<gdb::byte_vector> &auxv,
+			target_ops *target, gdbarch *gdbarch, CORE_ADDR match)
 {
   CORE_ADDR field;
-  if (target_auxv_search (target, AT_HWCAP, &field) != 1)
+  if (!auxv.has_value ()
+      || target_auxv_search (*auxv, target, gdbarch, match, &field) != 1)
     return 0;
   return field;
 }
@@ -2675,12 +2671,39 @@ linux_get_hwcap (struct target_ops *target)
 /* See linux-tdep.h.  */
 
 CORE_ADDR
-linux_get_hwcap2 (struct target_ops *target)
+linux_get_hwcap (const gdb::optional<gdb::byte_vector> &auxv,
+		 target_ops *target, gdbarch *gdbarch)
 {
-  CORE_ADDR field;
-  if (target_auxv_search (target, AT_HWCAP2, &field) != 1)
-    return 0;
-  return field;
+  return linux_get_hwcap_helper (auxv, target, gdbarch, AT_HWCAP);
+}
+
+/* See linux-tdep.h.  */
+
+CORE_ADDR
+linux_get_hwcap ()
+{
+  return linux_get_hwcap (target_read_auxv (),
+			  current_inferior ()->top_target (),
+			  current_inferior ()->gdbarch);
+}
+
+/* See linux-tdep.h.  */
+
+CORE_ADDR
+linux_get_hwcap2 (const gdb::optional<gdb::byte_vector> &auxv,
+		  target_ops *target, gdbarch *gdbarch)
+{
+  return linux_get_hwcap_helper (auxv, target, gdbarch, AT_HWCAP2);
+}
+
+/* See linux-tdep.h.  */
+
+CORE_ADDR
+linux_get_hwcap2 ()
+{
+  return linux_get_hwcap2 (target_read_auxv (),
+			   current_inferior ()->top_target (),
+			   current_inferior ()->gdbarch);
 }
 
 /* Display whether the gcore command is using the
@@ -2752,9 +2775,6 @@ void _initialize_linux_tdep ();
 void
 _initialize_linux_tdep ()
 {
-  linux_gdbarch_data_handle =
-    gdbarch_data_register_pre_init (init_linux_gdbarch_data);
-
   /* Observers used to invalidate the cache when needed.  */
   gdb::observers::inferior_exit.attach (invalidate_linux_cache_inf,
 					"linux-tdep");
@@ -2806,6 +2826,7 @@ linux_ilp32_fetch_link_map_offsets ()
       lmo.r_map_offset = 4;
       lmo.r_brk_offset = 8;
       lmo.r_ldsomap_offset = -1;
+      lmo.r_next_offset = 20;
 
       /* Everything we need is in the first 20 bytes.  */
       lmo.link_map_size = 20;
@@ -2834,6 +2855,7 @@ linux_lp64_fetch_link_map_offsets ()
       lmo.r_map_offset = 8;
       lmo.r_brk_offset = 16;
       lmo.r_ldsomap_offset = -1;
+      lmo.r_next_offset = 40;
 
       /* Everything we need is in the first 40 bytes.  */
       lmo.link_map_size = 40;

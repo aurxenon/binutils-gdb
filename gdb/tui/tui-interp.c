@@ -135,6 +135,7 @@ tui_interp::resume ()
 void
 tui_interp::suspend ()
 {
+  gdb_disable_readline ();
   tui_start_enabled = tui_active;
   tui_disable ();
 }
@@ -151,7 +152,7 @@ tui_interp::interp_ui_out ()
 gdb_exception
 tui_interp::exec (const char *command_str)
 {
-  internal_error (__FILE__, __LINE__, _("tui_exec called"));
+  internal_error (_("tui_exec called"));
 }
 
 

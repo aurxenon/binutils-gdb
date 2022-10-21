@@ -193,7 +193,7 @@ static const unsigned short rt_sigtramp_code[] =
    the routine.  Otherwise, return 0.  */
 
 static CORE_ADDR
-cris_sigtramp_start (struct frame_info *this_frame)
+cris_sigtramp_start (frame_info_ptr this_frame)
 {
   CORE_ADDR pc = get_frame_pc (this_frame);
   gdb_byte buf[SIGTRAMP_LEN];
@@ -221,7 +221,7 @@ cris_sigtramp_start (struct frame_info *this_frame)
    the routine.  Otherwise, return 0.  */
 
 static CORE_ADDR
-cris_rt_sigtramp_start (struct frame_info *this_frame)
+cris_rt_sigtramp_start (frame_info_ptr this_frame)
 {
   CORE_ADDR pc = get_frame_pc (this_frame);
   gdb_byte buf[SIGTRAMP_LEN];
@@ -249,7 +249,7 @@ cris_rt_sigtramp_start (struct frame_info *this_frame)
    return the address of the associated sigcontext structure.  */
 
 static CORE_ADDR
-cris_sigcontext_addr (struct frame_info *this_frame)
+cris_sigcontext_addr (frame_info_ptr this_frame)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -309,7 +309,7 @@ struct cris_unwind_cache
 };
 
 static struct cris_unwind_cache *
-cris_sigtramp_frame_unwind_cache (struct frame_info *this_frame,
+cris_sigtramp_frame_unwind_cache (frame_info_ptr this_frame,
 				  void **this_cache)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
@@ -402,7 +402,7 @@ cris_sigtramp_frame_unwind_cache (struct frame_info *this_frame,
 }
 
 static void
-cris_sigtramp_frame_this_id (struct frame_info *this_frame, void **this_cache,
+cris_sigtramp_frame_this_id (frame_info_ptr this_frame, void **this_cache,
 			     struct frame_id *this_id)
 {
   struct cris_unwind_cache *cache =
@@ -412,10 +412,10 @@ cris_sigtramp_frame_this_id (struct frame_info *this_frame, void **this_cache,
 
 /* Forward declaration.  */
 
-static struct value *cris_frame_prev_register (struct frame_info *this_frame,
+static struct value *cris_frame_prev_register (frame_info_ptr this_frame,
 					       void **this_cache, int regnum);
 static struct value *
-cris_sigtramp_frame_prev_register (struct frame_info *this_frame,
+cris_sigtramp_frame_prev_register (frame_info_ptr this_frame,
 				   void **this_cache, int regnum)
 {
   /* Make sure we've initialized the cache.  */
@@ -425,7 +425,7 @@ cris_sigtramp_frame_prev_register (struct frame_info *this_frame,
 
 static int
 cris_sigtramp_frame_sniffer (const struct frame_unwind *self,
-			     struct frame_info *this_frame,
+			     frame_info_ptr this_frame,
 			     void **this_cache)
 {
   if (cris_sigtramp_start (this_frame) 
@@ -448,7 +448,7 @@ static const struct frame_unwind cris_sigtramp_frame_unwind =
 
 static int
 crisv32_single_step_through_delay (struct gdbarch *gdbarch,
-				   struct frame_info *this_frame)
+				   frame_info_ptr this_frame)
 {
   cris_gdbarch_tdep *tdep = gdbarch_tdep<cris_gdbarch_tdep> (gdbarch);
   ULONGEST erp;
@@ -645,11 +645,11 @@ static void set_cris_dwarf2_cfi (const char *ignore_args, int from_tty,
 				 struct cmd_list_element *c);
 
 static CORE_ADDR cris_scan_prologue (CORE_ADDR pc, 
-				     struct frame_info *this_frame,
+				     frame_info_ptr this_frame,
 				     struct cris_unwind_cache *info);
 
 static CORE_ADDR crisv32_scan_prologue (CORE_ADDR pc, 
-					struct frame_info *this_frame,
+					frame_info_ptr this_frame,
 					struct cris_unwind_cache *info);
 
 /* When arguments must be pushed onto the stack, they go on in reverse
@@ -692,7 +692,7 @@ pop_stack_item (struct cris_stack_item *si)
    for it IS the sp for the next frame.  */
 
 static struct cris_unwind_cache *
-cris_frame_unwind_cache (struct frame_info *this_frame,
+cris_frame_unwind_cache (frame_info_ptr this_frame,
 			 void **this_prologue_cache)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
@@ -729,7 +729,7 @@ cris_frame_unwind_cache (struct frame_info *this_frame,
    frame.  This will be used to create a new GDB frame struct.  */
 
 static void
-cris_frame_this_id (struct frame_info *this_frame,
+cris_frame_this_id (frame_info_ptr this_frame,
 		    void **this_prologue_cache,
 		    struct frame_id *this_id)
 {
@@ -755,7 +755,7 @@ cris_frame_this_id (struct frame_info *this_frame,
 }
 
 static struct value *
-cris_frame_prev_register (struct frame_info *this_frame,
+cris_frame_prev_register (frame_info_ptr this_frame,
 			  void **this_prologue_cache, int regnum)
 {
   struct cris_unwind_cache *info
@@ -821,7 +821,7 @@ cris_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       int reg_demand;
       int i;
       
-      len = TYPE_LENGTH (value_type (args[argnum]));
+      len = value_type (args[argnum])->length ();
       val = value_contents (args[argnum]).data ();
       
       /* How may registers worth of storage do we need for this argument?  */
@@ -912,7 +912,7 @@ static const struct frame_unwind cris_frame_unwind =
 };
 
 static CORE_ADDR
-cris_frame_base_address (struct frame_info *this_frame, void **this_cache)
+cris_frame_base_address (frame_info_ptr this_frame, void **this_cache)
 {
   struct cris_unwind_cache *info
     = cris_frame_unwind_cache (this_frame, this_cache);
@@ -1004,7 +1004,7 @@ static const struct frame_base cris_frame_base =
    determine that it is a prologue (1).  */
 
 static CORE_ADDR 
-cris_scan_prologue (CORE_ADDR pc, struct frame_info *this_frame,
+cris_scan_prologue (CORE_ADDR pc, frame_info_ptr this_frame,
 		    struct cris_unwind_cache *info)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
@@ -1287,7 +1287,7 @@ cris_scan_prologue (CORE_ADDR pc, struct frame_info *this_frame,
 }
 
 static CORE_ADDR 
-crisv32_scan_prologue (CORE_ADDR pc, struct frame_info *this_frame,
+crisv32_scan_prologue (CORE_ADDR pc, frame_info_ptr this_frame,
 		    struct cris_unwind_cache *info)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
@@ -1611,7 +1611,7 @@ cris_store_return_value (struct type *type, struct regcache *regcache,
   struct gdbarch *gdbarch = regcache->arch ();
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   ULONGEST val;
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
   
   if (len <= 4)
     {
@@ -1654,7 +1654,7 @@ cris_special_register_name (struct gdbarch *gdbarch, int regno)
 	return cris_spec_regs[i].name;
     }
   /* Special register not applicable to this CRIS version.  */
-  return NULL;
+  return "";
 }
 
 static const char *
@@ -1666,9 +1666,10 @@ cris_register_name (struct gdbarch *gdbarch, int regno)
     "r8",  "r9",  "r10", "r11", \
     "r12", "r13", "sp",  "pc" };
 
-  if (regno >= 0 && regno < NUM_GENREGS)
+  if (regno < NUM_GENREGS)
     {
       /* General register.  */
+      gdb_static_assert (ARRAY_SIZE (cris_genreg_names) == NUM_GENREGS);
       return cris_genreg_names[regno];
     }
   else if (regno >= NUM_GENREGS && regno < gdbarch_num_regs (gdbarch))
@@ -1678,7 +1679,7 @@ cris_register_name (struct gdbarch *gdbarch, int regno)
   else
     {
       /* Invalid register.  */
-      return NULL;
+      return "";
     }
 }
 
@@ -1755,7 +1756,7 @@ cris_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 static void
 cris_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
 			    struct dwarf2_frame_state_reg *reg,
-			    struct frame_info *this_frame)
+			    frame_info_ptr this_frame)
 {
   /* The return address column.  */
   if (regnum == gdbarch_pc_regnum (gdbarch))
@@ -1779,7 +1780,7 @@ cris_extract_return_value (struct type *type, struct regcache *regcache,
   struct gdbarch *gdbarch = regcache->arch ();
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   ULONGEST val;
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
   
   if (len <= 4)
     {
@@ -1808,7 +1809,7 @@ cris_return_value (struct gdbarch *gdbarch, struct value *function,
 {
   if (type->code () == TYPE_CODE_STRUCT
       || type->code () == TYPE_CODE_UNION
-      || TYPE_LENGTH (type) > 8)
+      || type->length () > 8)
     /* Structs, unions, and anything larger than 8 bytes (2 registers)
        goes on the stack.  */
     return RETURN_VALUE_STRUCT_CONVENTION;
@@ -3883,8 +3884,7 @@ set_cris_version (const char *ignore_args, int from_tty,
   
   /* Update the current architecture, if needed.  */
   if (!gdbarch_update_p (info))
-    internal_error (__FILE__, __LINE__, 
-		    _("cris_gdbarch_update: failed to update architecture."));
+    internal_error (_("cris_gdbarch_update: failed to update architecture."));
 }
 
 static void
@@ -3895,8 +3895,7 @@ set_cris_mode (const char *ignore_args, int from_tty,
 
   /* Update the current architecture, if needed.  */
   if (!gdbarch_update_p (info))
-    internal_error (__FILE__, __LINE__, 
-		    "cris_gdbarch_update: failed to update architecture.");
+    internal_error ("cris_gdbarch_update: failed to update architecture.");
 }
 
 static void
@@ -3907,8 +3906,7 @@ set_cris_dwarf2_cfi (const char *ignore_args, int from_tty,
 
   /* Update the current architecture, if needed.  */
   if (!gdbarch_update_p (info))
-    internal_error (__FILE__, __LINE__, 
-		    _("cris_gdbarch_update: failed to update architecture."));
+    internal_error (_("cris_gdbarch_update: failed to update architecture."));
 }
 
 static struct gdbarch *

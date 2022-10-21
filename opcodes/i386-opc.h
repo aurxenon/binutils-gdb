@@ -521,10 +521,6 @@ enum
 #define PrefixHLELock		5 /* Okay with a LOCK prefix.  */
 #define PrefixHLEAny		6 /* Okay with or without a LOCK prefix.  */
   PrefixOk,
-  /* Convert to DWORD */
-  ToDword,
-  /* Convert to QWORD */
-  ToQword,
   /* Address prefix changes register operand */
   AddrPrefixOpReg,
   /* opcode is a prefix */
@@ -535,8 +531,6 @@ enum
   NoRex64,
   /* deprecated fp insn, gets a warning */
   Ugh,
-  /* Intel AVX Instructions support via {vex} prefix */
-  PseudoVexPrefix,
   /* insn has VEX prefix:
 	1: 128bit VEX prefix (or operand dependent).
 	2: 256bit VEX prefix.
@@ -740,14 +734,11 @@ typedef struct i386_opcode_modifier
   unsigned int regkludge:1;
   unsigned int implicit1stxmm0:1;
   unsigned int prefixok:3;
-  unsigned int todword:1;
-  unsigned int toqword:1;
   unsigned int addrprefixopreg:1;
   unsigned int isprefix:1;
   unsigned int immext:1;
   unsigned int norex64:1;
   unsigned int ugh:1;
-  unsigned int pseudovexprefix:1;
   unsigned int vex:2;
   unsigned int vexvvvv:2;
   unsigned int vexw:2;
@@ -928,7 +919,7 @@ typedef struct insn_template
 			       unset if Regmem --> Reg. */
 #define Opcode_FloatR	0x8 /* Bit to swap src/dest for float insns. */
 #define Opcode_FloatD 0x400 /* Direction bit for float insns. */
-#define Opcode_SIMD_FloatD 0x1 /* Direction bit for SIMD fp insns. */
+#define Opcode_ExtD	0x1 /* Direction bit for extended opcode space insns. */
 #define Opcode_SIMD_IntD 0x10 /* Direction bit for SIMD int insns. */
 /* The next value is arbitrary, as long as it's non-zero and distinct
    from all other values above.  */

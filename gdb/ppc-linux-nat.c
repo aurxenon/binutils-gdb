@@ -530,8 +530,8 @@ struct ppc_linux_nat_target final : public linux_nat_target
 
   const struct target_desc *read_description ()  override;
 
-  int auxv_parse (gdb_byte **readptr,
-		  gdb_byte *endptr, CORE_ADDR *typep, CORE_ADDR *valp)
+  int auxv_parse (const gdb_byte **readptr,
+		  const gdb_byte *endptr, CORE_ADDR *typep, CORE_ADDR *valp)
     override;
 
   /* Override linux_nat_target low methods.  */
@@ -1113,8 +1113,7 @@ fetch_register (struct regcache *regcache, int tid, int regno)
       regcache->raw_supply (regno, buf + padding);
     }
   else 
-    internal_error (__FILE__, __LINE__,
-		    _("fetch_register: unexpected byte order: %d"),
+    internal_error (_("fetch_register: unexpected byte order: %d"),
 		    gdbarch_byte_order (gdbarch));
 }
 
@@ -1915,8 +1914,8 @@ fill_fpregset (const struct regcache *regcache,
 }
 
 int
-ppc_linux_nat_target::auxv_parse (gdb_byte **readptr,
-				  gdb_byte *endptr, CORE_ADDR *typep,
+ppc_linux_nat_target::auxv_parse (const gdb_byte **readptr,
+				  const gdb_byte *endptr, CORE_ADDR *typep,
 				  CORE_ADDR *valp)
 {
   int tid = inferior_ptid.lwp ();
@@ -1926,7 +1925,7 @@ ppc_linux_nat_target::auxv_parse (gdb_byte **readptr,
   int sizeof_auxv_field = ppc_linux_target_wordsize (tid);
 
   enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-  gdb_byte *ptr = *readptr;
+  const gdb_byte *ptr = *readptr;
 
   if (endptr == ptr)
     return 0;
@@ -1965,8 +1964,8 @@ ppc_linux_nat_target::read_description ()
 
   features.wordsize = ppc_linux_target_wordsize (tid);
 
-  CORE_ADDR hwcap = linux_get_hwcap (current_inferior ()->top_target ());
-  CORE_ADDR hwcap2 = linux_get_hwcap2 (current_inferior ()->top_target ());
+  CORE_ADDR hwcap = linux_get_hwcap ();
+  CORE_ADDR hwcap2 = linux_get_hwcap2 ();
 
   if (have_ptrace_getsetvsxregs
       && (hwcap & PPC_FEATURE_HAS_VSX))
@@ -2123,8 +2122,7 @@ ppc_linux_nat_target::region_ok_for_hw_watchpoint (CORE_ADDR addr, int len)
 	 takes two hardware watchpoints though.  */
       if (len > 1
 	  && hwdebug_info.features & PPC_DEBUG_FEATURE_DATA_BP_RANGE
-	  && (linux_get_hwcap (current_inferior ()->top_target ())
-	      & PPC_FEATURE_BOOKE))
+	  && (linux_get_hwcap () & PPC_FEATURE_BOOKE))
 	return 2;
       /* Check if the processor provides DAWR interface.  */
       if (hwdebug_info.features & PPC_DEBUG_FEATURE_DATA_BP_DAWR)
@@ -2152,8 +2150,7 @@ ppc_linux_nat_target::region_ok_for_hw_watchpoint (CORE_ADDR addr, int len)
     {
       gdb_assert (m_dreg_interface.debugreg_p ());
 
-      if (((linux_get_hwcap (current_inferior ()->top_target ())
-	    & PPC_FEATURE_BOOKE)
+      if (((linux_get_hwcap () & PPC_FEATURE_BOOKE)
 	   && (addr + len) > (addr & ~3) + 4)
 	  || (addr + len) > (addr & ~7) + 8)
 	return 0;
@@ -2519,7 +2516,7 @@ ppc_linux_nat_target::check_condition (CORE_ADDR watch_addr,
 
       /* DATA_VALUE is the constant in RIGHT_VAL, but actually has
 	 the same type as the memory region referenced by LEFT_VAL.  */
-      *len = TYPE_LENGTH (check_typedef (value_type (left_val)));
+      *len = check_typedef (value_type (left_val))->length ();
     }
   else if (num_accesses_left == 0 && num_accesses_right == 1
 	   && VALUE_LVAL (right_val) == lval_memory
@@ -2529,7 +2526,7 @@ ppc_linux_nat_target::check_condition (CORE_ADDR watch_addr,
 
       /* DATA_VALUE is the constant in LEFT_VAL, but actually has
 	 the same type as the memory region referenced by RIGHT_VAL.  */
-      *len = TYPE_LENGTH (check_typedef (value_type (right_val)));
+      *len = check_typedef (value_type (right_val))->length ();
     }
   else
     return 0;
@@ -2640,8 +2637,7 @@ ppc_linux_nat_target::insert_watchpoint (CORE_ADDR addr, int len,
       long wp_value;
       long read_mode, write_mode;
 
-      if (linux_get_hwcap (current_inferior ()->top_target ())
-	  & PPC_FEATURE_BOOKE)
+      if (linux_get_hwcap () & PPC_FEATURE_BOOKE)
 	{
 	  /* PowerPC 440 requires only the read/write flags to be passed
 	     to the kernel.  */
@@ -3014,11 +3010,9 @@ ppc_linux_nat_target::watchpoint_addr_within_range (CORE_ADDR addr,
   int mask;
 
   if (m_dreg_interface.hwdebug_p ()
-      && (linux_get_hwcap (current_inferior ()->top_target ())
-	  & PPC_FEATURE_BOOKE))
+      && (linux_get_hwcap () & PPC_FEATURE_BOOKE))
     return start <= addr && start + length >= addr;
-  else if (linux_get_hwcap (current_inferior ()->top_target ())
-	   & PPC_FEATURE_BOOKE)
+  else if (linux_get_hwcap () & PPC_FEATURE_BOOKE)
     mask = 3;
   else
     mask = 7;

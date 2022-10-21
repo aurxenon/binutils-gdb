@@ -42,7 +42,7 @@
 #include "../bfd/libcoff.h"
 #include "deffile.h"
 
-#ifdef pe_use_x86_64
+#ifdef pe_use_plus
 
 #define PE_IDATA4_SIZE	8
 #define PE_IDATA5_SIZE	8
@@ -209,7 +209,7 @@ static const autofilter_entry_type autofilter_symbollist_i386[] =
   { STRING_COMMA_LEN ("_NULL_IMPORT_DESCRIPTOR") },
   /* Entry point symbols, and entry hooks.  */
   { STRING_COMMA_LEN ("cygwin_crt0") },
-#ifdef pe_use_x86_64
+#ifdef pe_use_plus
   { STRING_COMMA_LEN ("DllMain") },
   { STRING_COMMA_LEN ("DllEntryPoint") },
   { STRING_COMMA_LEN ("DllMainCRTStartup") },
@@ -246,13 +246,14 @@ static const autofilter_entry_type autofilter_symbollist_i386[] =
 #define PE_ARCH_mips	 3
 #define PE_ARCH_arm	 4
 #define PE_ARCH_arm_wince 5
+#define PE_ARCH_aarch64  6
 
 /* Don't make it constant as underscore mode gets possibly overriden
    by target or -(no-)leading-underscore option.  */
 static pe_details_type pe_detail_list[] =
 {
   {
-#ifdef pe_use_x86_64
+#ifdef pe_use_plus
     "pei-x86-64",
     "pe-x86-64",
     3 /* R_IMAGEBASE */,
@@ -263,14 +264,14 @@ static pe_details_type pe_detail_list[] =
 #endif
     PE_ARCH_i386,
     bfd_arch_i386,
-#ifdef pe_use_x86_64
+#ifdef pe_use_plus
     false,
 #else
     true,
 #endif
     autofilter_symbollist_i386
   },
-#ifdef pe_use_x86_64
+#ifdef pe_use_plus
   {
     "pei-x86-64",
     "pe-bigobj-x86-64",
@@ -324,6 +325,15 @@ static pe_details_type pe_detail_list[] =
     2,  /* ARM_RVA32 on Windows CE, see bfd/coff-arm.c.  */
     PE_ARCH_arm_wince,
     bfd_arch_arm,
+    false,
+    autofilter_symbollist_generic
+  },
+  {
+    "pei-aarch64-little",
+    "pe-aarch64-little",
+    2,  /* ARM64_RVA32 */
+    PE_ARCH_aarch64,
+    bfd_arch_aarch64,
     false,
     autofilter_symbollist_generic
   },
@@ -671,6 +681,7 @@ static void
 process_def_file_and_drectve (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 {
   int i, j;
+  unsigned int ui;
   struct bfd_link_hash_entry *blhe;
   bfd *b;
   struct bfd_section *s;
@@ -715,6 +726,15 @@ process_def_file_and_drectve (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *
 	      sym_hash->root.u.c.p->alignment_power = (unsigned) ac->alignment;
 	    }
 	  ac = ac->next;
+	}
+    }
+
+  if (pe_def_file->exclude_symbols)
+    {
+      for (ui = 0; ui < pe_def_file->num_exclude_symbols; ui++)
+	{
+	  pe_dll_add_excludes (pe_def_file->exclude_symbols[ui].symbol_name,
+			       EXCLUDESYMS);
 	}
     }
 
@@ -781,7 +801,7 @@ process_def_file_and_drectve (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *
 
 		  if (auto_export (b, pe_def_file, sn))
 		    {
-		      int is_dup = 0;
+		      bool is_dup = false;
 		      def_file_export *p;
 
 		      p = def_file_add_export (pe_def_file, sn, 0, -1,
@@ -847,7 +867,7 @@ process_def_file_and_drectve (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *
 
 	  if (strchr (pe_def_file->exports[i].name, '@'))
 	    {
-	      int is_dup = 1;
+	      bool is_dup = true;
 	      int lead_at = (*pe_def_file->exports[i].name == '@');
 	      char *tmp = xstrdup (pe_def_file->exports[i].name + lead_at);
 
@@ -1500,8 +1520,7 @@ generate_reloc (bfd *abfd, struct bfd_link_info *info)
   int total_relocs = 0;
   int i;
   bfd_vma sec_page = (bfd_vma) -1;
-  bfd_vma page_ptr, page_count;
-  int bi;
+  bfd_vma page_ptr;
   bfd *b;
   struct bfd_section *s;
 
@@ -1515,8 +1534,7 @@ generate_reloc (bfd *abfd, struct bfd_link_info *info)
   reloc_data = xmalloc (total_relocs * sizeof (reloc_data_type));
 
   total_relocs = 0;
-  bi = 0;
-  for (bi = 0, b = info->input_bfds; b; bi++, b = b->link.next)
+  for (b = info->input_bfds; b; b = b->link.next)
     {
       arelent **relocs;
       int relsize, nrelocs;
@@ -1630,7 +1648,7 @@ generate_reloc (bfd *abfd, struct bfd_link_info *info)
 		  switch BITS_AND_SHIFT (relocs[i]->howto->bitsize,
 					 relocs[i]->howto->rightshift)
 		    {
-#ifdef pe_use_x86_64
+#ifdef pe_use_plus
 		    case BITS_AND_SHIFT (64, 0):
 		      reloc_data[total_relocs].type = IMAGE_REL_BASED_DIR64;
 		      total_relocs++;
@@ -1711,7 +1729,6 @@ generate_reloc (bfd *abfd, struct bfd_link_info *info)
   sec_page = (bfd_vma) -1;
   reloc_sz = 0;
   page_ptr = (bfd_vma) -1;
-  page_count = 0;
 
   for (i = 0; i < total_relocs; i++)
     {
@@ -1730,7 +1747,6 @@ generate_reloc (bfd *abfd, struct bfd_link_info *info)
 	  page_ptr = reloc_sz;
 	  reloc_sz += 8;
 	  sec_page = this_page;
-	  page_count = 0;
 	}
 
       bfd_put_16 (abfd, (rva & 0xfff) + (reloc_data[i].type << 12),
@@ -1743,7 +1759,6 @@ generate_reloc (bfd *abfd, struct bfd_link_info *info)
 	  reloc_sz += 2;
 	}
 
-      page_count++;
     }
 
   while (reloc_sz & 3)
@@ -1812,10 +1827,8 @@ pe_dll_generate_def_file (const char *pe_out_def_filename)
 	  quoteput (pe_def_file->name, out, 1);
 
 	  if (pe_data (link_info.output_bfd)->pe_opthdr.ImageBase)
-	    {
-	      fprintf (out, " BASE=0x");
-	      fprintf_vma (out, ((bfd_vma) pe_data (link_info.output_bfd)->pe_opthdr.ImageBase));
-	    }
+	    fprintf (out, " BASE=0x%" PRIx64,
+		     (uint64_t) pe_data (link_info.output_bfd)->pe_opthdr.ImageBase);
 	  fprintf (out, "\n");
 	}
 
@@ -2245,6 +2258,15 @@ static const unsigned char jmp_ix86_bytes[] =
 };
 
 /* _function:
+  b <__imp_function>
+  nop */
+static const unsigned char jmp_aarch64_bytes[] =
+{
+  0x00, 0x00, 0x00, 0x14,
+  0x1f, 0x20, 0x03, 0xD5
+};
+
+/* _function:
 	mov.l	ip+8,r0
 	mov.l	@r0,r0
 	jmp	@r0
@@ -2313,6 +2335,10 @@ make_one (def_file_export *exp, bfd *parent, bool include_jmp_stub)
 	case PE_ARCH_arm_wince:
 	  jmp_bytes = jmp_arm_bytes;
 	  jmp_byte_count = sizeof (jmp_arm_bytes);
+	  break;
+	case PE_ARCH_aarch64:
+	  jmp_bytes = jmp_aarch64_bytes;
+	  jmp_byte_count = sizeof (jmp_aarch64_bytes);
 	  break;
 	default:
 	  abort ();
@@ -2383,7 +2409,7 @@ make_one (def_file_export *exp, bfd *parent, bool include_jmp_stub)
       switch (pe_details->pe_arch)
 	{
 	case PE_ARCH_i386:
-#ifdef pe_use_x86_64
+#ifdef pe_use_plus
 	  quick_reloc (abfd, 2, BFD_RELOC_32_PCREL, 2);
 #else
 	  /* Mark this object as SAFESEH compatible.  */
@@ -2403,6 +2429,9 @@ make_one (def_file_export *exp, bfd *parent, bool include_jmp_stub)
 	case PE_ARCH_arm:
 	case PE_ARCH_arm_wince:
 	  quick_reloc (abfd, 8, BFD_RELOC_32, 2);
+	  break;
+	case PE_ARCH_aarch64:
+	  quick_reloc (abfd, 0, BFD_RELOC_AARCH64_JUMP26, 2);
 	  break;
 	default:
 	  abort ();
@@ -3403,7 +3432,7 @@ pe_implied_import_dll (const char *filename)
   /* Get pe_header, optional header and numbers of directory entries.  */
   pe_header_offset = pe_get32 (dll, 0x3c);
   opthdr_ofs = pe_header_offset + 4 + 20;
-#ifdef pe_use_x86_64
+#ifdef pe_use_plus
   num_entries = pe_get32 (dll, opthdr_ofs + 92 + 4 * 4); /*  & NumberOfRvaAndSizes.  */
 #else
   num_entries = pe_get32 (dll, opthdr_ofs + 92);
@@ -3413,7 +3442,7 @@ pe_implied_import_dll (const char *filename)
   if (num_entries < 1)
     return false;
 
-#ifdef pe_use_x86_64
+#ifdef pe_use_plus
   export_rva  = pe_get32 (dll, opthdr_ofs + 96 + 4 * 4);
   export_size = pe_get32 (dll, opthdr_ofs + 100 + 4 * 4);
 #else
@@ -3571,7 +3600,7 @@ pe_implied_import_dll (const char *filename)
 	 exported in buggy auto-import releases.  */
       if (! startswith (erva + name_rva, "__nm_"))
 	{
-	  int is_dup = 0;
+	  bool is_dup = false;
 	  /* is_data is true if the address is in the data, rdata or bss
 	     segment.  */
 	  is_data =

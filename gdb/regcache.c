@@ -41,19 +41,17 @@
 /* Per-architecture object describing the layout of a register cache.
    Computed once when the architecture is created.  */
 
-static struct gdbarch_data *regcache_descr_handle;
-
 struct regcache_descr
 {
   /* The architecture this descriptor belongs to.  */
-  struct gdbarch *gdbarch;
+  struct gdbarch *gdbarch = nullptr;
 
   /* The raw register cache.  Each raw (or hard) register is supplied
      by the target interface.  The raw cache should not contain
      redundant information - if the PC is constructed from two
      registers then those registers and not the PC lives in the raw
      cache.  */
-  long sizeof_raw_registers;
+  long sizeof_raw_registers = 0;
 
   /* The cooked register space.  Each cooked register in the range
      [0..NR_RAW_REGISTERS) is direct-mapped onto the corresponding raw
@@ -61,21 +59,24 @@ struct regcache_descr
      .. NR_COOKED_REGISTERS) (a.k.a. pseudo registers) are mapped onto
      both raw registers and memory by the architecture methods
      gdbarch_pseudo_register_read and gdbarch_pseudo_register_write.  */
-  int nr_cooked_registers;
-  long sizeof_cooked_registers;
+  int nr_cooked_registers = 0;
+  long sizeof_cooked_registers = 0;
 
   /* Offset and size (in 8 bit bytes), of each register in the
      register cache.  All registers (including those in the range
      [NR_RAW_REGISTERS .. NR_COOKED_REGISTERS) are given an
      offset.  */
-  long *register_offset;
-  long *sizeof_register;
+  long *register_offset = nullptr;
+  long *sizeof_register = nullptr;
 
   /* Cached table containing the type of each register.  */
-  struct type **register_type;
+  struct type **register_type = nullptr;
 };
 
-static void *
+static const registry<gdbarch>::key<struct regcache_descr>
+     regcache_descr_handle;
+
+static struct regcache_descr *
 init_regcache_descr (struct gdbarch *gdbarch)
 {
   int i;
@@ -83,7 +84,7 @@ init_regcache_descr (struct gdbarch *gdbarch)
   gdb_assert (gdbarch != NULL);
 
   /* Create an initial, zero filled, table.  */
-  descr = GDBARCH_OBSTACK_ZALLOC (gdbarch, struct regcache_descr);
+  descr = new struct regcache_descr;
   descr->gdbarch = gdbarch;
 
   /* Total size of the register space.  The raw registers are mapped
@@ -117,7 +118,7 @@ init_regcache_descr (struct gdbarch *gdbarch)
       = GDBARCH_OBSTACK_CALLOC (gdbarch, descr->nr_cooked_registers, long);
     for (i = 0; i < gdbarch_num_regs (gdbarch); i++)
       {
-	descr->sizeof_register[i] = TYPE_LENGTH (descr->register_type[i]);
+	descr->sizeof_register[i] = descr->register_type[i]->length ();
 	descr->register_offset[i] = offset;
 	offset += descr->sizeof_register[i];
       }
@@ -126,7 +127,7 @@ init_regcache_descr (struct gdbarch *gdbarch)
 
     for (; i < descr->nr_cooked_registers; i++)
       {
-	descr->sizeof_register[i] = TYPE_LENGTH (descr->register_type[i]);
+	descr->sizeof_register[i] = descr->register_type[i]->length ();
 	descr->register_offset[i] = offset;
 	offset += descr->sizeof_register[i];
       }
@@ -140,8 +141,14 @@ init_regcache_descr (struct gdbarch *gdbarch)
 static struct regcache_descr *
 regcache_descr (struct gdbarch *gdbarch)
 {
-  return (struct regcache_descr *) gdbarch_data (gdbarch,
-						 regcache_descr_handle);
+  struct regcache_descr *result = regcache_descr_handle.get (gdbarch);
+  if (result == nullptr)
+    {
+      result = init_regcache_descr (gdbarch);
+      regcache_descr_handle.set (gdbarch, result);
+    }
+
+  return result;
 }
 
 /* Utility functions returning useful register attributes stored in
@@ -701,10 +708,10 @@ readable_regcache::cooked_read (int regnum, gdb_byte *buf)
     }
   else if (gdbarch_pseudo_register_read_value_p (m_descr->gdbarch))
     {
-      struct value *mark, *computed;
+      struct value *computed;
       enum register_status result = REG_VALID;
 
-      mark = value_mark ();
+      scoped_value_mark mark;
 
       computed = gdbarch_pseudo_register_read_value (m_descr->gdbarch,
 						     this, regnum);
@@ -716,8 +723,6 @@ readable_regcache::cooked_read (int regnum, gdb_byte *buf)
 	  memset (buf, 0, m_descr->sizeof_register[regnum]);
 	  result = REG_UNAVAILABLE;
 	}
-
-      value_free_to_mark (mark);
 
       return result;
     }
@@ -748,7 +753,7 @@ readable_regcache::cooked_read_value (int regnum)
       if (cooked_read (regnum,
 		       value_contents_raw (result).data ()) == REG_UNAVAILABLE)
 	mark_value_bytes_unavailable (result, 0,
-				      TYPE_LENGTH (value_type (result)));
+				      value_type (result)->length ());
 
       return result;
     }
@@ -1330,8 +1335,7 @@ regcache_read_pc (struct regcache *regcache)
       pc_val = gdbarch_addr_bits_remove (gdbarch, raw_val);
     }
   else
-    internal_error (__FILE__, __LINE__,
-		    _("regcache_read_pc: Unable to find PC"));
+    internal_error (_("regcache_read_pc: Unable to find PC"));
   return pc_val;
 }
 
@@ -1364,8 +1368,7 @@ regcache_write_pc (struct regcache *regcache, CORE_ADDR pc)
     regcache_cooked_write_unsigned (regcache,
 				    gdbarch_pc_regnum (gdbarch), pc);
   else
-    internal_error (__FILE__, __LINE__,
-		    _("regcache_write_pc: Unable to update PC"));
+    internal_error (_("regcache_write_pc: Unable to update PC"));
 
   /* Writing the PC (for instance, from "load") invalidates the
      current frame.  */
@@ -1385,7 +1388,6 @@ regcache::debug_print_register (const char *func,  int regno)
 
   gdb_printf (gdb_stdlog, "%s ", func);
   if (regno >= 0 && regno < gdbarch_num_regs (gdbarch)
-      && gdbarch_register_name (gdbarch, regno) != NULL
       && gdbarch_register_name (gdbarch, regno)[0] != '\0')
     gdb_printf (gdb_stdlog, "(%s)",
 		gdbarch_register_name (gdbarch, regno));
@@ -1446,9 +1448,7 @@ register_dump::dump (ui_file *file)
 	{
 	  const char *p = gdbarch_register_name (m_gdbarch, regnum);
 
-	  if (p == NULL)
-	    p = "";
-	  else if (p[0] == '\0')
+	  if (p[0] == '\0')
 	    p = "''";
 	  gdb_printf (file, " %-10s", p);
 	}
@@ -2118,9 +2118,6 @@ void
 _initialize_regcache ()
 {
   struct cmd_list_element *c;
-
-  regcache_descr_handle
-    = gdbarch_data_register_post_init (init_regcache_descr);
 
   gdb::observers::target_changed.attach (regcache_observer_target_changed,
 					 "regcache");

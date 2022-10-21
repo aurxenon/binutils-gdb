@@ -983,7 +983,7 @@ fbsd_nat_target::async (bool enable)
   if (enable)
     {
       if (!async_file_open ())
-	internal_error (__FILE__, __LINE__, "failed to create event pipe.");
+	internal_error ("failed to create event pipe.");
 
       add_file_handler (async_wait_fd (), handle_target_event, NULL, "fbsd-nat");
 
@@ -1779,7 +1779,7 @@ fbsd_nat_target::store_register_set (struct regcache *regcache, int regnum,
 
 /* See fbsd-nat.h.  */
 
-bool
+size_t
 fbsd_nat_target::have_regset (ptid_t ptid, int note)
 {
   pid_t pid = get_ptrace_pid (ptid);

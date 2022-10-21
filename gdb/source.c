@@ -1146,15 +1146,7 @@ find_and_open_source (const char *filename,
 	 helpful if part of the compilation directory was removed,
 	 e.g. using gcc's -fdebug-prefix-map, and we have added the missing
 	 prefix to source_path.  */
-      std::string cdir_filename (dirname);
-
-      /* Remove any trailing directory separators.  */
-      while (IS_DIR_SEPARATOR (cdir_filename.back ()))
-	cdir_filename.pop_back ();
-
-      /* Add our own directory separator.  */
-      cdir_filename.append (SLASH_STRING);
-      cdir_filename.append (filename_start);
+      std::string cdir_filename = path_join (dirname, filename_start);
 
       result = openp (path, OPF_SEARCH_IN_PATH | OPF_RETURN_REALPATH,
 		      cdir_filename.c_str (), OPEN_MODE, fullname);
@@ -1203,7 +1195,8 @@ open_source_file (struct symtab *s)
 	      srcpath += s->filename;
 	    }
 
-	  const struct bfd_build_id *build_id = build_id_bfd_get (ofp->obfd);
+	  const struct bfd_build_id *build_id
+	    = build_id_bfd_get (ofp->obfd.get ());
 
 	  /* Query debuginfod for the source file.  */
 	  if (build_id != nullptr && !srcpath.empty ())
@@ -1300,7 +1293,7 @@ symtab_to_filename_for_display (struct symtab *symtab)
   else if (filename_display_string == filename_display_relative)
     return symtab->filename;
   else
-    internal_error (__FILE__, __LINE__, _("invalid filename_display_string"));
+    internal_error (_("invalid filename_display_string"));
 }
 
 

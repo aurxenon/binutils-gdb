@@ -419,7 +419,7 @@ get_any_string (size_t idx, sb *in, sb *out)
 			       idx + 1,
 			       in,
 			       &val);
-	  sprintf (buf, "%" BFD_VMA_FMT "d", val);
+	  sprintf (buf, "%" PRId64, (int64_t) val);
 	  sb_add_string (out, buf);
 	}
       else if (in->ptr[idx] == '"'
@@ -1046,6 +1046,8 @@ macro_expand_body (sb *in, sb *out, formal_entry *formals,
       loclist = f;
     }
 
+  if (!err && (out->len == 0 || out->ptr[out->len - 1] != '\n'))
+    sb_add_char (out, '\n');
   return err;
 }
 

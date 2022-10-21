@@ -77,12 +77,12 @@ ppcnbsd_return_value (struct gdbarch *gdbarch, struct value *function,
 #if 0
   if ((valtype->code () == TYPE_CODE_STRUCT
        || valtype->code () == TYPE_CODE_UNION)
-      && !((TYPE_LENGTH (valtype) == 16 || TYPE_LENGTH (valtype) == 8)
+      && !((valtype->length () == 16 || valtype->length () == 8)
 	    && valtype->is_vector ())
-      && !(TYPE_LENGTH (valtype) == 1
-	   || TYPE_LENGTH (valtype) == 2
-	   || TYPE_LENGTH (valtype) == 4
-	   || TYPE_LENGTH (valtype) == 8))
+      && !(valtype->length () == 1
+	   || valtype->length () == 2
+	   || valtype->length () == 4
+	   || valtype->length () == 8))
     return RETURN_VALUE_STRUCT_CONVENTION;
   else
 #endif
@@ -97,7 +97,7 @@ extern const struct tramp_frame ppcnbsd2_sigtramp;
 
 static void
 ppcnbsd_sigtramp_cache_init (const struct tramp_frame *self,
-			     struct frame_info *this_frame,
+			     frame_info_ptr this_frame,
 			     struct trad_frame_cache *this_cache,
 			     CORE_ADDR func)
 {

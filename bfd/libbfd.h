@@ -1,6 +1,6 @@
 /* DO NOT EDIT!  -*- buffer-read-only: t -*-  This file is automatically
    generated from "libbfd-in.h", "libbfd.c", "bfdio.c", "bfdwin.c",
-   "cache.c", "reloc.c", "archures.c" and "linker.c".
+   "cache.c", "reloc.c", "targets.c", "archures.c" and "linker.c".
    Run "make headers" in your build bfd/ to regenerate.  */
 
 /* libbfd.h -- Declarations used by bfd library *implementation*.
@@ -456,6 +456,10 @@ extern bool _bfd_nosymbols_find_nearest_line
   (bfd *, asymbol **, asection *, bfd_vma,
    const char **, const char **, unsigned int *, unsigned int *)
   ATTRIBUTE_HIDDEN;
+extern bool _bfd_nosymbols_find_nearest_line_with_alt
+  (bfd *, const char *, asymbol **, asection *, bfd_vma,
+   const char **, const char **, unsigned int *, unsigned int *)
+  ATTRIBUTE_HIDDEN;
 extern bool _bfd_nosymbols_find_line
   (bfd *, asymbol **, asymbol *, const char **, unsigned int *)
   ATTRIBUTE_HIDDEN;
@@ -591,6 +595,13 @@ extern int _bfd_dwarf2_find_nearest_line
    const char **, const char **, unsigned int *, unsigned int *,
    const struct dwarf_debug_section *, void **) ATTRIBUTE_HIDDEN;
 
+/* Find the nearest line using DWARF 2 debugging information, with
+   the option of specifying a .gnu_debugaltlink file.  */
+extern int _bfd_dwarf2_find_nearest_line_with_alt
+  (bfd *, const char *, asymbol **, asymbol *, asection *, bfd_vma,
+   const char **, const char **, unsigned int *, unsigned int *,
+   const struct dwarf_debug_section *, void **) ATTRIBUTE_HIDDEN;
+
 /* Find the bias between DWARF addresses and real addresses.  */
 extern bfd_signed_vma _bfd_dwarf2_find_symbol_bias
   (asymbol **, void **) ATTRIBUTE_HIDDEN;
@@ -607,6 +618,9 @@ extern bool _bfd_dwarf2_slurp_debug_info
 
 /* Clean up the data used to handle DWARF 2 debugging information. */
 extern void _bfd_dwarf2_cleanup_debug_info
+  (bfd *, void **) ATTRIBUTE_HIDDEN;
+
+extern void _bfd_stab_cleanup
   (bfd *, void **) ATTRIBUTE_HIDDEN;
 
 /* Create a new section entry.  */
@@ -3534,6 +3548,9 @@ bool _bfd_unrecognized_reloc
    (bfd * abfd,
     sec_ptr section,
     unsigned int r_type);
+
+/* Extracted from targets.c.  */
+const char **_bfd_per_xvec_warn (const bfd_target *);
 
 /* Extracted from archures.c.  */
 extern const bfd_arch_info_type bfd_default_arch_struct;

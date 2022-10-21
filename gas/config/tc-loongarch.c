@@ -143,13 +143,13 @@ md_parse_option (int c, const char *arg)
   char ilp32[256] = "";
   unsigned char *suf = (unsigned char *)arg;
 
-  lp64['s'] = lp64['S'] = EF_LOONGARCH_ABI_LP64_SOFT_FLOAT;
-  lp64['f'] = lp64['F'] = EF_LOONGARCH_ABI_LP64_SINGLE_FLOAT;
-  lp64['d'] = lp64['D'] = EF_LOONGARCH_ABI_LP64_DOUBLE_FLOAT;
+  lp64['s'] = lp64['S'] = EF_LOONGARCH_ABI_SOFT_FLOAT;
+  lp64['f'] = lp64['F'] = EF_LOONGARCH_ABI_SINGLE_FLOAT;
+  lp64['d'] = lp64['D'] = EF_LOONGARCH_ABI_DOUBLE_FLOAT;
 
-  ilp32['s'] = ilp32['S'] = EF_LOONGARCH_ABI_ILP32_SOFT_FLOAT;
-  ilp32['f'] = ilp32['F'] = EF_LOONGARCH_ABI_ILP32_SINGLE_FLOAT;
-  ilp32['d'] = ilp32['D'] = EF_LOONGARCH_ABI_ILP32_DOUBLE_FLOAT;
+  ilp32['s'] = ilp32['S'] = EF_LOONGARCH_ABI_SOFT_FLOAT;
+  ilp32['f'] = ilp32['F'] = EF_LOONGARCH_ABI_SINGLE_FLOAT;
+  ilp32['d'] = ilp32['D'] = EF_LOONGARCH_ABI_DOUBLE_FLOAT;
 
   switch (c)
     {
@@ -216,24 +216,24 @@ void
 loongarch_after_parse_args ()
 {
   /* Set default ABI/ISA LP64D.  */
-  if (!EF_LOONGARCH_IS_LP64(LARCH_opts.ase_abi)
-      && !EF_LOONGARCH_IS_ILP32(LARCH_opts.ase_abi))
+  if (!LARCH_opts.ase_ilp32)
     {
       if (strcmp (default_arch, "loongarch64") == 0)
 	{
-	  LARCH_opts.ase_abi = EF_LOONGARCH_ABI_LP64_DOUBLE_FLOAT;
+	  LARCH_opts.ase_abi = EF_LOONGARCH_ABI_DOUBLE_FLOAT;
 	  LARCH_opts.ase_ilp32 = 1;
 	  LARCH_opts.ase_lp64 = 1;
 	}
       else if (strcmp (default_arch, "loongarch32") == 0)
 	{
-	  LARCH_opts.ase_abi = EF_LOONGARCH_ABI_ILP32_DOUBLE_FLOAT;
+	  LARCH_opts.ase_abi = EF_LOONGARCH_ABI_DOUBLE_FLOAT;
 	  LARCH_opts.ase_ilp32 = 1;
 	}
       else
 	as_bad ("unknown default architecture `%s'", default_arch);
     }
 
+  LARCH_opts.ase_abi |= EF_LOONGARCH_OBJABI_V1;
   /* Set default ISA double-float.  */
   if (!LARCH_opts.ase_nf
       && !LARCH_opts.ase_sf
@@ -578,24 +578,6 @@ loongarch_args_parser_can_match_arg_helper (char esc_ch1, char esc_ch2,
       ip->match_now =
 	loongarch_parse_expr (arg, ip->reloc_info + ip->reloc_num,
 			      reloc_num_we_have, &reloc_num, &imm) == 0;
-
-      if (!ip->match_now)
-	break;
-
-      if (esc_ch1 == 's')
-	switch (esc_ch2)
-	  {
-	  case 'c':
-	    ip->match_now = reloc_num == 0;
-	    break;
-	  }
-      else
-	switch (esc_ch2)
-	  {
-	  case 'c':
-	    ip->match_now = reloc_num == 0 && 0 <= imm;
-	    break;
-	  }
 
       if (!ip->match_now)
 	break;
@@ -1157,10 +1139,6 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 
     case BFD_RELOC_64:
     case BFD_RELOC_32:
-    case BFD_RELOC_24:
-    case BFD_RELOC_16:
-    case BFD_RELOC_8:
-
       if (fixP->fx_r_type == BFD_RELOC_32
 	  && fixP->fx_addsy && fixP->fx_subsy
 	  && (sub_segment = S_GET_SEGMENT (fixP->fx_subsy))
@@ -1191,25 +1169,52 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 	      fixP->fx_r_type = BFD_RELOC_LARCH_ADD32;
 	      fixP->fx_next->fx_r_type = BFD_RELOC_LARCH_SUB32;
 	      break;
-	    case BFD_RELOC_24:
-	      fixP->fx_r_type = BFD_RELOC_LARCH_ADD24;
-	      fixP->fx_next->fx_r_type = BFD_RELOC_LARCH_SUB24;
-	      break;
-	    case BFD_RELOC_16:
-	      fixP->fx_r_type = BFD_RELOC_LARCH_ADD16;
-	      fixP->fx_next->fx_r_type = BFD_RELOC_LARCH_SUB16;
-	      break;
-	    case BFD_RELOC_8:
-	      fixP->fx_r_type = BFD_RELOC_LARCH_ADD8;
-	      fixP->fx_next->fx_r_type = BFD_RELOC_LARCH_SUB8;
-	      break;
 	    default:
 	      break;
 	    }
+
 	  md_number_to_chars (buf, 0, fixP->fx_size);
-	  if (fixP->fx_next->fx_addsy == NULL)
-	    fixP->fx_next->fx_done = 1;
 	}
+
+      if (fixP->fx_addsy == NULL)
+	{
+	  fixP->fx_done = 1;
+	  md_number_to_chars (buf, *valP, fixP->fx_size);
+	}
+      break;
+
+    case BFD_RELOC_24:
+    case BFD_RELOC_16:
+    case BFD_RELOC_8:
+      fixP->fx_next = xmemdup (fixP, sizeof (*fixP), sizeof (*fixP));
+      fixP->fx_next->fx_addsy = fixP->fx_subsy;
+      fixP->fx_next->fx_subsy = NULL;
+      fixP->fx_next->fx_offset = 0;
+      fixP->fx_subsy = NULL;
+
+      switch (fixP->fx_r_type)
+	{
+	case BFD_RELOC_24:
+	  fixP->fx_r_type = BFD_RELOC_LARCH_ADD24;
+	  fixP->fx_next->fx_r_type = BFD_RELOC_LARCH_SUB24;
+	  break;
+	case BFD_RELOC_16:
+	  fixP->fx_r_type = BFD_RELOC_LARCH_ADD16;
+	  fixP->fx_next->fx_r_type = BFD_RELOC_LARCH_SUB16;
+	  break;
+	case BFD_RELOC_8:
+	  fixP->fx_r_type = BFD_RELOC_LARCH_ADD8;
+	  fixP->fx_next->fx_r_type = BFD_RELOC_LARCH_SUB8;
+	  break;
+	default:
+	  break;
+	}
+
+      md_number_to_chars (buf, 0, fixP->fx_size);
+
+      if (fixP->fx_next->fx_addsy == NULL)
+	fixP->fx_next->fx_done = 1;
+
       if (fixP->fx_addsy == NULL)
 	{
 	  fixP->fx_done = 1;

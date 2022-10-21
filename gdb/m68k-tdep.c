@@ -173,12 +173,9 @@ m68k_register_name (struct gdbarch *gdbarch, int regnum)
 {
   m68k_gdbarch_tdep *tdep = gdbarch_tdep<m68k_gdbarch_tdep> (gdbarch);
 
-  if (regnum < 0 || regnum >= ARRAY_SIZE (m68k_register_names))
-    internal_error (__FILE__, __LINE__,
-		    _("m68k_register_name: illegal register number %d"),
-		    regnum);
-  else if (regnum >= M68K_FP0_REGNUM && regnum <= M68K_FPI_REGNUM
-	   && tdep->fpregs_present == 0)
+  gdb_static_assert (ARRAY_SIZE (m68k_register_names) == M68K_NUM_REGS);
+  if (regnum >= M68K_FP0_REGNUM && regnum <= M68K_FPI_REGNUM
+      && tdep->fpregs_present == 0)
     return "";
   else
     return m68k_register_names[regnum];
@@ -205,7 +202,7 @@ m68k_convert_register_p (struct gdbarch *gdbarch,
    return its contents in TO.  */
 
 static int
-m68k_register_to_value (struct frame_info *frame, int regnum,
+m68k_register_to_value (frame_info_ptr frame, int regnum,
 			struct type *type, gdb_byte *to,
 			int *optimizedp, int *unavailablep)
 {
@@ -232,7 +229,7 @@ m68k_register_to_value (struct frame_info *frame, int regnum,
    REGNUM in frame FRAME.  */
 
 static void
-m68k_value_to_register (struct frame_info *frame, int regnum,
+m68k_value_to_register (frame_info_ptr frame, int regnum,
 			struct type *type, const gdb_byte *from)
 {
   gdb_byte to[M68K_MAX_REGISTER_SIZE];
@@ -294,7 +291,7 @@ static void
 m68k_extract_return_value (struct type *type, struct regcache *regcache,
 			   gdb_byte *valbuf)
 {
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
   gdb_byte buf[M68K_MAX_REGISTER_SIZE];
 
   if (type->code () == TYPE_CODE_PTR && len == 4)
@@ -315,8 +312,7 @@ m68k_extract_return_value (struct type *type, struct regcache *regcache,
       regcache->raw_read (M68K_D1_REGNUM, valbuf + (len - 4));
     }
   else
-    internal_error (__FILE__, __LINE__,
-		    _("Cannot extract return value of %d bytes long."), len);
+    internal_error (_("Cannot extract return value of %d bytes long."), len);
 }
 
 static void
@@ -343,7 +339,7 @@ static void
 m68k_store_return_value (struct type *type, struct regcache *regcache,
 			 const gdb_byte *valbuf)
 {
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
 
   if (type->code () == TYPE_CODE_PTR && len == 4)
     {
@@ -362,8 +358,7 @@ m68k_store_return_value (struct type *type, struct regcache *regcache,
       regcache->raw_write (M68K_D1_REGNUM, valbuf + (len - 4));
     }
   else
-    internal_error (__FILE__, __LINE__,
-		    _("Cannot store return value of %d bytes long."), len);
+    internal_error (_("Cannot store return value of %d bytes long."), len);
 }
 
 static void
@@ -393,7 +388,7 @@ m68k_reg_struct_return_p (struct gdbarch *gdbarch, struct type *type)
 {
   m68k_gdbarch_tdep *tdep = gdbarch_tdep<m68k_gdbarch_tdep> (gdbarch);
   enum type_code code = type->code ();
-  int len = TYPE_LENGTH (type);
+  int len = type->length ();
 
   gdb_assert (code == TYPE_CODE_STRUCT || code == TYPE_CODE_UNION
 	      || code == TYPE_CODE_COMPLEX || code == TYPE_CODE_ARRAY);
@@ -404,7 +399,7 @@ m68k_reg_struct_return_p (struct gdbarch *gdbarch, struct type *type)
   const bool is_vector = code == TYPE_CODE_ARRAY && type->is_vector ();
 
   if (is_vector
-      && check_typedef (TYPE_TARGET_TYPE (type))->code () == TYPE_CODE_FLT)
+      && check_typedef (type->target_type ())->code () == TYPE_CODE_FLT)
     return 0;
 
   /* According to m68k_return_in_memory in the m68k GCC back-end,
@@ -438,7 +433,7 @@ m68k_return_value (struct gdbarch *gdbarch, struct value *function,
   if (((code == TYPE_CODE_STRUCT || code == TYPE_CODE_UNION
 	|| code == TYPE_CODE_COMPLEX || code == TYPE_CODE_ARRAY)
        && !m68k_reg_struct_return_p (gdbarch, type))
-      || (code == TYPE_CODE_FLT && TYPE_LENGTH (type) == 12))
+      || (code == TYPE_CODE_FLT && type->length () == 12))
     {
       /* The default on m68k is to return structures in static memory.
 	 Consequently a function must return the address where we can
@@ -449,7 +444,7 @@ m68k_return_value (struct gdbarch *gdbarch, struct value *function,
 	  ULONGEST addr;
 
 	  regcache_raw_read_unsigned (regcache, M68K_D0_REGNUM, &addr);
-	  read_memory (addr, readbuf, TYPE_LENGTH (type));
+	  read_memory (addr, readbuf, type->length ());
 	}
 
       return RETURN_VALUE_ABI_RETURNS_ADDRESS;
@@ -487,7 +482,7 @@ m68k_svr4_return_value (struct gdbarch *gdbarch, struct value *function,
       /* GCC may return a `long double' in memory too.  */
       || (!tdep->float_return
 	  && code == TYPE_CODE_FLT
-	  && TYPE_LENGTH (type) == 12))
+	  && type->length () == 12))
     {
       /* The System V ABI says that:
 
@@ -509,7 +504,7 @@ m68k_svr4_return_value (struct gdbarch *gdbarch, struct value *function,
 
 	  regcache_raw_read_unsigned (regcache, tdep->pointer_result_regnum,
 				      &addr);
-	  read_memory (addr, readbuf, TYPE_LENGTH (type));
+	  read_memory (addr, readbuf, type->length ());
 	}
 
       return RETURN_VALUE_ABI_RETURNS_ADDRESS;
@@ -550,7 +545,7 @@ m68k_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   for (i = nargs - 1; i >= 0; i--)
     {
       struct type *value_type = value_enclosing_type (args[i]);
-      int len = TYPE_LENGTH (value_type);
+      int len = value_type->length ();
       int container_len = (len + 3) & ~3;
       int offset;
 
@@ -901,7 +896,7 @@ m68k_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 }
 
 static CORE_ADDR
-m68k_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
+m68k_unwind_pc (struct gdbarch *gdbarch, frame_info_ptr next_frame)
 {
   gdb_byte buf[8];
 
@@ -912,7 +907,7 @@ m68k_unwind_pc (struct gdbarch *gdbarch, struct frame_info *next_frame)
 /* Normal frames.  */
 
 static struct m68k_frame_cache *
-m68k_frame_cache (struct frame_info *this_frame, void **this_cache)
+m68k_frame_cache (frame_info_ptr this_frame, void **this_cache)
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -977,7 +972,7 @@ m68k_frame_cache (struct frame_info *this_frame, void **this_cache)
 }
 
 static void
-m68k_frame_this_id (struct frame_info *this_frame, void **this_cache,
+m68k_frame_this_id (frame_info_ptr this_frame, void **this_cache,
 		    struct frame_id *this_id)
 {
   struct m68k_frame_cache *cache = m68k_frame_cache (this_frame, this_cache);
@@ -991,7 +986,7 @@ m68k_frame_this_id (struct frame_info *this_frame, void **this_cache,
 }
 
 static struct value *
-m68k_frame_prev_register (struct frame_info *this_frame, void **this_cache,
+m68k_frame_prev_register (frame_info_ptr this_frame, void **this_cache,
 			  int regnum)
 {
   struct m68k_frame_cache *cache = m68k_frame_cache (this_frame, this_cache);
@@ -1020,7 +1015,7 @@ static const struct frame_unwind m68k_frame_unwind =
 };
 
 static CORE_ADDR
-m68k_frame_base_address (struct frame_info *this_frame, void **this_cache)
+m68k_frame_base_address (frame_info_ptr this_frame, void **this_cache)
 {
   struct m68k_frame_cache *cache = m68k_frame_cache (this_frame, this_cache);
 
@@ -1036,7 +1031,7 @@ static const struct frame_base m68k_frame_base =
 };
 
 static struct frame_id
-m68k_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
+m68k_dummy_id (struct gdbarch *gdbarch, frame_info_ptr this_frame)
 {
   CORE_ADDR fp;
 
@@ -1053,7 +1048,7 @@ m68k_dummy_id (struct gdbarch *gdbarch, struct frame_info *this_frame)
    This routine returns true on success.  */
 
 static int
-m68k_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
+m68k_get_longjmp_target (frame_info_ptr frame, CORE_ADDR *pc)
 {
   gdb_byte *buf;
   CORE_ADDR sp, jb_addr;
@@ -1063,8 +1058,7 @@ m68k_get_longjmp_target (struct frame_info *frame, CORE_ADDR *pc)
 
   if (tdep->jb_pc < 0)
     {
-      internal_error (__FILE__, __LINE__,
-		      _("m68k_get_longjmp_target: not implemented"));
+      internal_error (_("m68k_get_longjmp_target: not implemented"));
       return 0;
     }
 
