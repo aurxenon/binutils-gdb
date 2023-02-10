@@ -23,6 +23,7 @@
 #define _LIBELF_H_ 1
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "elf/common.h"
 #include "elf/external.h"
