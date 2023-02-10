@@ -140,7 +140,7 @@ using namespace expr;
 %left '+' '-'
 %left '*' '/' DIV MOD
 %right UNARY
-%right '^' DOT '[' '('
+%right '^' M2DOT '[' '('
 %right NOT '~'
 %left COLONCOLON QID
 /* This is not an actual token ; it is used for precedence. 
@@ -262,7 +262,7 @@ exp	:	DEC '(' exp ',' exp ')'
 			}
 	;
 
-exp	:	exp DOT NAME
+exp	:	exp M2DOT NAME
 			{
 			  pstate->push_new<structop_operation>
 			    (pstate->pop (), copy_name ($3));
@@ -297,7 +297,7 @@ exp     :       exp '['
 			   that follow in the list.  It is *not* specific to
 			   function types */
 			{ pstate->start_arglist(); }
-		non_empty_arglist ']'  %prec DOT
+		non_empty_arglist ']'  %prec M2DOT
 			{
 			  gdb_assert (pstate->arglist_len > 0);
 			  std::vector<operation_up> args
@@ -311,7 +311,7 @@ exp	:	exp '('
 			/* This is to save the value of arglist_len
 			   being accumulated by an outer function call.  */
 			{ pstate->start_arglist (); }
-		arglist ')'	%prec DOT
+		arglist ')'	%prec M2DOT
 			{
 			  std::vector<operation_up> args
 			    = pstate->pop_vector (pstate->end_arglist ());
@@ -793,7 +793,7 @@ yylex (void)
       else
       {
 	 pstate->lexptr++;
-	 return DOT;
+	 return M2DOT;
       }
 
 /* These are character tokens that appear as-is in the YACC grammar */
