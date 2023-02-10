@@ -123,6 +123,8 @@ aarch64-*-pe* | aarch64-*-mingw*)
 			targ_extra_emuls="arm64pe"
 			targ_extra_ofiles="deffilep.o pep-dll-aarch64.o pe-dll.o pdb.o"
 			;;
+alpha*-*-elf*)		targ_emul=elf64alpha
+			;;
 alpha*-*-freebsd* | alpha*-*-kfreebsd*-gnu)
 			targ_emul=elf64alpha_fbsd
 			targ_extra_emuls="elf64alpha alpha"

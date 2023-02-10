@@ -293,6 +293,11 @@ case "${targ}" in
     targ_selvecs="aarch64_elf64_le_vec aarch64_elf32_le_vec aarch64_elf32_be_vec arm_elf32_be_vec arm_elf32_le_vec"
     want64=true
     ;;
+  alpha*-*-elf*)
+    targ_defvec=alpha_elf64_vec
+    targ_selvecs=alpha_ecoff_le_vec
+    want64=true
+    ;;
   alpha*-*-freebsd* | alpha*-*-kfreebsd*-gnu)
     targ_defvec=alpha_elf64_fbsd_vec
     targ_selvecs="alpha_elf64_vec alpha_ecoff_le_vec"
