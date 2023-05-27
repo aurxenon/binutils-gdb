@@ -265,10 +265,8 @@ frame_addr_hash_eq (const void *a, const void *b)
 /* Deletion function for the frame cache hash table.  */
 
 static void
-frame_info_del (void *frame_v)
+frame_info_del (frame_info *frame)
 {
-  frame_info *frame = (frame_info *) frame_v;
-
   if (frame->prologue_cache != nullptr
       && frame->unwind->dealloc_cache != nullptr)
     frame->unwind->dealloc_cache (frame, frame->prologue_cache);
@@ -284,10 +282,13 @@ frame_info_del (void *frame_v)
 static void
 frame_stash_create (void)
 {
-  frame_stash = htab_create (100,
-			     frame_addr_hash,
-			     frame_addr_hash_eq,
-			     frame_info_del);
+  frame_stash = htab_create
+    (100, frame_addr_hash, frame_addr_hash_eq,
+     [] (void *p)
+       {
+	 auto frame = static_cast<frame_info *> (p);
+	 frame_info_del (frame);
+       });
 }
 
 /* Internal function to add a frame to the frame_stash hash table.
@@ -439,9 +440,9 @@ frame_id::to_string () const
   return res;
 }
 
-/* Return a string representation of TYPE.  */
+/* See frame.h.  */
 
-static const char *
+const char *
 frame_type_str (frame_type type)
 {
   switch (type)
@@ -894,7 +895,7 @@ frame_id_inner (struct gdbarch *gdbarch, struct frame_id l, struct frame_id r)
 	/* This will return true if LB and RB are the same block, or
 	   if the block with the smaller depth lexically encloses the
 	   block with the greater depth.  */
-	inner = contained_in (lb, rb);
+	inner = rb->contains (lb);
     }
   else
     /* Only return non-zero when strictly inner than.  Note that, per
@@ -930,7 +931,7 @@ frame_find_by_id (struct frame_id id)
      and get_prev_frame performs a series of checks that are relatively
      expensive).  This optimization is particularly useful when this function
      is called from another function (such as value_fetch_lazy, case
-     VALUE_LVAL (val) == lval_register) which already loops over all frames,
+     val->lval () == lval_register) which already loops over all frames,
      making the overall behavior O(n^2).  */
   frame = frame_stash_find (id);
   if (frame)
@@ -1189,10 +1190,10 @@ frame_register_unwind (frame_info_ptr next_frame, int regnum,
 
   gdb_assert (value != NULL);
 
-  *optimizedp = value_optimized_out (value);
-  *unavailablep = !value_entirely_available (value);
-  *lvalp = VALUE_LVAL (value);
-  *addrp = value_address (value);
+  *optimizedp = value->optimized_out ();
+  *unavailablep = !value->entirely_available ();
+  *lvalp = value->lval ();
+  *addrp = value->address ();
   if (*lvalp == lval_register)
     *realnump = VALUE_REGNUM (value);
   else
@@ -1201,10 +1202,10 @@ frame_register_unwind (frame_info_ptr next_frame, int regnum,
   if (bufferp)
     {
       if (!*optimizedp && !*unavailablep)
-	memcpy (bufferp, value_contents_all (value).data (),
-		value_type (value)->length ());
+	memcpy (bufferp, value->contents_all ().data (),
+		value->type ()->length ());
       else
-	memset (bufferp, 0, value_type (value)->length ());
+	memset (bufferp, 0, value->type ()->length ());
     }
 
   /* Dispose of the new value.  This prevents watchpoints from
@@ -1289,29 +1290,29 @@ frame_unwind_register_value (frame_info_ptr next_frame, int regnum)
       string_file debug_file;
 
       gdb_printf (&debug_file, "  ->");
-      if (value_optimized_out (value))
+      if (value->optimized_out ())
 	{
 	  gdb_printf (&debug_file, " ");
 	  val_print_not_saved (&debug_file);
 	}
       else
 	{
-	  if (VALUE_LVAL (value) == lval_register)
+	  if (value->lval () == lval_register)
 	    gdb_printf (&debug_file, " register=%d",
 			VALUE_REGNUM (value));
-	  else if (VALUE_LVAL (value) == lval_memory)
+	  else if (value->lval () == lval_memory)
 	    gdb_printf (&debug_file, " address=%s",
 			paddress (gdbarch,
-				  value_address (value)));
+				  value->address ()));
 	  else
 	    gdb_printf (&debug_file, " computed");
 
-	  if (value_lazy (value))
+	  if (value->lazy ())
 	    gdb_printf (&debug_file, " lazy");
 	  else
 	    {
 	      int i;
-	      gdb::array_view<const gdb_byte> buf = value_contents (value);
+	      gdb::array_view<const gdb_byte> buf = value->contents ();
 
 	      gdb_printf (&debug_file, " bytes=");
 	      gdb_printf (&debug_file, "[");
@@ -1342,18 +1343,18 @@ frame_unwind_register_signed (frame_info_ptr next_frame, int regnum)
 
   gdb_assert (value != NULL);
 
-  if (value_optimized_out (value))
+  if (value->optimized_out ())
     {
       throw_error (OPTIMIZED_OUT_ERROR,
 		   _("Register %d was not saved"), regnum);
     }
-  if (!value_entirely_available (value))
+  if (!value->entirely_available ())
     {
       throw_error (NOT_AVAILABLE_ERROR,
 		   _("Register %d is not available"), regnum);
     }
 
-  LONGEST r = extract_signed_integer (value_contents_all (value), byte_order);
+  LONGEST r = extract_signed_integer (value->contents_all (), byte_order);
 
   release_value (value);
   return r;
@@ -1375,18 +1376,18 @@ frame_unwind_register_unsigned (frame_info_ptr next_frame, int regnum)
 
   gdb_assert (value != NULL);
 
-  if (value_optimized_out (value))
+  if (value->optimized_out ())
     {
       throw_error (OPTIMIZED_OUT_ERROR,
 		   _("Register %d was not saved"), regnum);
     }
-  if (!value_entirely_available (value))
+  if (!value->entirely_available ())
     {
       throw_error (NOT_AVAILABLE_ERROR,
 		   _("Register %d is not available"), regnum);
     }
 
-  ULONGEST r = extract_unsigned_integer (value_contents_all (value).data (),
+  ULONGEST r = extract_unsigned_integer (value->contents_all ().data (),
 					 size, byte_order);
 
   release_value (value);
@@ -1405,14 +1406,14 @@ read_frame_register_unsigned (frame_info_ptr frame, int regnum,
 {
   struct value *regval = get_frame_register_value (frame, regnum);
 
-  if (!value_optimized_out (regval)
-      && value_entirely_available (regval))
+  if (!regval->optimized_out ()
+      && regval->entirely_available ())
     {
       struct gdbarch *gdbarch = get_frame_arch (frame);
       enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
       int size = register_size (gdbarch, VALUE_REGNUM (regval));
 
-      *val = extract_unsigned_integer (value_contents (regval).data (), size,
+      *val = extract_unsigned_integer (regval->contents ().data (), size,
 				       byte_order);
       return true;
     }
@@ -1537,8 +1538,8 @@ get_frame_register_bytes (frame_info_ptr frame, int regnum,
 	    = frame_unwind_register_value (frame_info_ptr (frame->next),
 					   regnum);
 	  gdb_assert (value != NULL);
-	  *optimizedp = value_optimized_out (value);
-	  *unavailablep = !value_entirely_available (value);
+	  *optimizedp = value->optimized_out ();
+	  *unavailablep = !value->entirely_available ();
 
 	  if (*optimizedp || *unavailablep)
 	    {
@@ -1546,7 +1547,7 @@ get_frame_register_bytes (frame_info_ptr frame, int regnum,
 	      return false;
 	    }
 
-	  memcpy (myaddr, value_contents_all (value).data () + offset,
+	  memcpy (myaddr, value->contents_all ().data () + offset,
 		  curr_len);
 	  release_value (value);
 	}
@@ -1598,10 +1599,10 @@ put_frame_register_bytes (frame_info_ptr frame, int regnum,
 					   regnum);
 	  gdb_assert (value != NULL);
 
-	  memcpy ((char *) value_contents_writeable (value).data () + offset,
+	  memcpy ((char *) value->contents_writeable ().data () + offset,
 		  myaddr, curr_len);
 	  put_frame_register (frame, regnum,
-			      value_contents_raw (value).data ());
+			      value->contents_raw ().data ());
 	  release_value (value);
 	}
 
@@ -1731,6 +1732,13 @@ get_current_frame (void)
    selected frame.  */
 static frame_id selected_frame_id = null_frame_id;
 static int selected_frame_level = -1;
+
+/* See frame.h.  This definition should come before any definition of a static
+   frame_info_ptr, to ensure that frame_list is destroyed after any static
+   frame_info_ptr.  This is necessary because the destructor of frame_info_ptr
+   uses frame_list.  */
+
+intrusive_list<frame_info_ptr> frame_info_ptr::frame_list;
 
 /* The cached frame_info object pointing to the selected frame.
    Looked up on demand by get_selected_frame.  */
@@ -2105,7 +2113,19 @@ reinit_frame_cache (void)
   invalidate_selected_frame ();
 
   /* Invalidate cache.  */
-  sentinel_frame = NULL;
+  if (sentinel_frame != nullptr)
+    {
+      /* If frame 0's id is not computed, it is not in the frame stash, so its
+	 dealloc functions will not be called when emptying the frash stash.
+	 Call frame_info_del manually in that case.  */
+      frame_info *current_frame = sentinel_frame->prev;
+      if (current_frame != nullptr
+	  && current_frame->this_id.p == frame_id_status::NOT_COMPUTED)
+	frame_info_del (current_frame);
+
+      sentinel_frame = nullptr;
+    }
+
   frame_stash_invalidate ();
 
   /* Since we can't really be sure what the first object allocated was.  */
@@ -2524,31 +2544,45 @@ inside_main_func (frame_info_ptr this_frame)
   if (current_program_space->symfile_object_file == nullptr)
     return false;
 
-  CORE_ADDR sym_addr;
+  CORE_ADDR sym_addr = 0;
   const char *name = main_name ();
   bound_minimal_symbol msymbol
     = lookup_minimal_symbol (name, NULL,
 			     current_program_space->symfile_object_file);
-  if (msymbol.minsym == nullptr)
+
+  if (msymbol.minsym != nullptr)
+    sym_addr = msymbol.value_address ();
+
+  /* Favor a full symbol in Fortran, for the case where the Fortran main
+     is also called "main".  */
+  if (msymbol.minsym == nullptr
+      || get_frame_language (this_frame) == language_fortran)
     {
       /* In some language (for example Fortran) there will be no minimal
 	 symbol with the name of the main function.  In this case we should
 	 search the full symbols to see if we can find a match.  */
       struct block_symbol bs = lookup_symbol (name, NULL, VAR_DOMAIN, 0);
-      if (bs.symbol == nullptr)
-	return false;
 
-      const struct block *block = bs.symbol->value_block ();
-      gdb_assert (block != nullptr);
-      sym_addr = block->start ();
+      /* We might have found some unrelated symbol.  For example, the
+	 Rust compiler can emit both a subprogram and a namespace with
+	 the same name in the same scope; and due to how gdb's symbol
+	 tables currently work, we can't request the one we'd
+	 prefer.  */
+      if (bs.symbol != nullptr && bs.symbol->aclass () == LOC_BLOCK)
+	{
+	  const struct block *block = bs.symbol->value_block ();
+	  gdb_assert (block != nullptr);
+	  sym_addr = block->start ();
+	}
+      else if (msymbol.minsym == nullptr)
+	return false;
     }
-  else
-    sym_addr = msymbol.value_address ();
 
   /* Convert any function descriptor addresses into the actual function
      code address.  */
-  sym_addr = gdbarch_convert_from_func_ptr_addr
-    (get_frame_arch (this_frame), sym_addr, current_inferior ()->top_target ());
+  sym_addr = (gdbarch_convert_from_func_ptr_addr
+	      (get_frame_arch (this_frame), sym_addr,
+	       current_inferior ()->top_target ()));
 
   return sym_addr == get_frame_func (this_frame);
 }
@@ -2567,7 +2601,7 @@ inside_entry_func (frame_info_ptr this_frame)
 }
 
 /* Return a structure containing various interesting information about
-   the frame that called THIS_FRAME.  Returns NULL if there is entier
+   the frame that called THIS_FRAME.  Returns NULL if there is either
    no such frame or the frame fails any of a set of target-independent
    condition that should terminate the frame chain (e.g., as unwinding
    past main()).
@@ -3245,10 +3279,6 @@ maintenance_print_frame_id (const char *args, int from_tty)
 	      frame_relative_level (frame),
 	      get_frame_id (frame).to_string ().c_str ());
 }
-
-/* See frame-info-ptr.h.  */
-
-intrusive_list<frame_info_ptr> frame_info_ptr::frame_list;
 
 /* See frame-info-ptr.h.  */
 

@@ -128,7 +128,7 @@ CXXFLAGS_FOR_TARGET = `echo $(CXXFLAGS) | sed -e 's/-fsanitize=[^ ]*//g'`
 
 transform = s/^ld-new$$/$(installed_linker)/;@program_transform_name@
 bin_PROGRAMS = ld-new
-info_TEXINFOS = ld.texi
+info_TEXINFOS = ld.texi ldint.texi
 ld_TEXINFOS = configdoc.texi
 noinst_TEXINFOS = ldint.texi
 man_MANS = ld.1
@@ -388,6 +388,7 @@ ALL_64_EMULATION_SOURCES = \
 	eaarch64linux32.c \
 	eaarch64linux32b.c \
 	eaarch64linuxb.c \
+	eaarch64nto.c \
 	eaarch64pe.c \
 	earm64pe.c \
 	eelf32_x86_64.c \
@@ -492,7 +493,8 @@ GENERATED_HFILES = ldgram.h ldemul-list.h deffilep.h
 
 # Require an early dependency on the generated headers, as the dependency
 # tracking will not cause them to be built beforehand.
-BUILT_SOURCES = $(GENERATED_HFILES)
+BUILT_SOURCES = $(GENERATED_HFILES) @MAINT@ $(GENERATED_CFILES) \
+	$(ALL_EMULATION_SOURCES) $(ALL_64_EMULATION_SOURCES)
 
 OFILES = ldgram.@OBJEXT@ ldlex-wrapper.@OBJEXT@ lexsup.@OBJEXT@ ldlang.@OBJEXT@ \
 	mri.@OBJEXT@ ldctor.@OBJEXT@ ldmain.@OBJEXT@ plugin.@OBJEXT@ \
@@ -547,7 +549,7 @@ po/SRC-POTFILES.in: @MAINT@ Makefile
 	for f in $(SRC_POTFILES); do echo $$f; done | LC_ALL=C sort > $@-tmp \
 	  && mv $@-tmp $(srcdir)/po/SRC-POTFILES.in
 
-po/BLD-POTFILES.in: @MAINT@ Makefile $(BLD_POTFILES)
+po/BLD-POTFILES.in: @MAINT@ Makefile
 	for f in $(BLD_POTFILES); do echo $$f; done | LC_ALL=C sort > $@-tmp \
 	  && mv $@-tmp $(srcdir)/po/BLD-POTFILES.in
 
@@ -881,6 +883,7 @@ $(ALL_EMULATION_SOURCES) $(ALL_64_EMULATION_SOURCES): $(GEN_DEPENDS)
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64linux32.Pc@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64linux32b.Pc@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64linuxb.Pc@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64nto.Pc@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64pe.Pc@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/earm64pe.Pc@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf32_x86_64.Pc@am__quote@
@@ -1055,7 +1058,19 @@ ld.1: $(srcdir)/ld.texi configdoc.texi
 		(rm -f $@.T$$$$ && exit 1)
 	$(AM_V_at)rm -f ld.pod
 
-MAINTAINERCLEANFILES = configdoc.texi ld.1
+# Build the man page from the texinfo file
+# The sed command removes the no-adjust Nroff command so that
+# the man output looks standard.
+ldint.1: $(srcdir)/ldint.texi configdoc.texi
+	$(AM_V_GEN)touch $@
+	$(AM_V_at)-$(TEXI2POD) $(MANCONF) < $(srcdir)/ldint.texi > ldint.pod
+	$(AM_V_at)-($(POD2MAN) ldint.pod | \
+		sed -e '/^.if n .na/d' > $@.T$$$$ && \
+		mv -f $@.T$$$$ $@) || \
+		(rm -f $@.T$$$$ && exit 1)
+	$(AM_V_at)rm -f ldint.pod
+
+MAINTAINERCLEANFILES = configdoc.texi ld.1 ldint.1
 
 # We want to reconfigure if configure.host or configure.tgt changes.
 # development.sh is used to determine -Werror default.

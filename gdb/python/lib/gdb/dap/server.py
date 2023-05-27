@@ -1,4 +1,4 @@
-# Copyright 2022 Free Software Foundation, Inc.
+# Copyright 2022-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -100,9 +100,7 @@ class Server:
         log("WROTE: <<<" + json.dumps(obj) + ">>>")
         self.write_queue.put(obj)
 
-    # This must be run in the DAP thread, but we can't use
-    # @in_dap_thread here because the global isn't set until after
-    # this starts running.  FIXME.
+    @in_dap_thread
     def main_loop(self):
         """The main loop of the DAP server."""
         # Before looping, start the thread that writes JSON to the
@@ -116,7 +114,7 @@ class Server:
             self._send_json(result)
             events = self.delayed_events
             self.delayed_events = []
-            for (event, body) in events:
+            for event, body in events:
                 self.send_event(event, body)
         # Got the terminate request.  This is handled by the
         # JSON-writing thread, so that we can ensure that all

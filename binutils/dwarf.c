@@ -659,14 +659,13 @@ fetch_indexed_string (uint64_t idx,
     return (dwo ? _("<no .debug_str.dwo section>")
 		: _("<no .debug_str section>"));
 
-  index_offset = idx * offset_size;
-
-  if (this_set != NULL)
-    index_offset += this_set->section_offsets [DW_SECT_STR_OFFSETS];
-
-  index_offset += str_offsets_base;
-
-  if (index_offset + offset_size > index_section->size)
+  if (_mul_overflow (idx, offset_size, &index_offset)
+      || (this_set != NULL
+	  && ((index_offset += this_set->section_offsets [DW_SECT_STR_OFFSETS])
+	      < this_set->section_offsets [DW_SECT_STR_OFFSETS]))
+      || (index_offset += str_offsets_base) < str_offsets_base
+      || index_offset + offset_size < offset_size
+      || index_offset + offset_size > index_section->size)
     {
       warn (_("string index of %" PRIu64 " converts to an offset of %#" PRIx64
 	      " which is too big for section %s"),
@@ -674,11 +673,6 @@ fetch_indexed_string (uint64_t idx,
 
       return _("<string index too big>");
     }
-
-  /* FIXME: If we are being paranoid then we should also check to see if
-     IDX references an entry beyond the end of the string table pointed to
-     by STR_OFFSETS_BASE.  (Since there can be more than one string table
-     in a DWARF string section).  */
 
   str_offset = byte_get (index_section->start + index_offset, offset_size);
 
@@ -990,6 +984,7 @@ process_abbrev_set (struct dwarf_section *section,
   list->first_abbrev = NULL;
   list->last_abbrev = NULL;
   list->raw = start;
+  list->next = NULL;
 
   while (start < end)
     {
@@ -1005,17 +1000,13 @@ process_abbrev_set (struct dwarf_section *section,
 	 the caller.  */
       if (start == end || entry == 0)
 	{
-	  list->next = NULL;
 	  list->start_of_next_abbrevs = start != end ? start : NULL;
 	  return list;
 	}
 
       READ_ULEB (tag, start, end);
       if (start == end)
-	{
-	  free (list);
-	  return NULL;
-	}
+	return free_abbrev_list (list);
 
       children = *start++;
 
@@ -1050,8 +1041,7 @@ process_abbrev_set (struct dwarf_section *section,
   /* Report the missing single zero which ends the section.  */
   error (_("%s section not zero terminated\n"), section->name);
 
-  free (list);
-  return NULL;
+  return free_abbrev_list (list);
 }
 
 /* Return a sequence of abbrevs in SECTION starting at ABBREV_BASE
@@ -2735,7 +2725,7 @@ read_and_display_attr_value (unsigned long attribute,
 		  if (idx != (uint64_t) -1)
 		    idx += (offset_size == 8) ? 20 : 12;
 		}
-	      else if (debug_info_p == NULL)
+	      else if (debug_info_p == NULL || dwarf_version > 4)
 		{
 		  idx = fetch_indexed_value (uvalue, loclists, 0);
 		}
@@ -2802,7 +2792,7 @@ read_and_display_attr_value (unsigned long attribute,
       break;
 
     default:
-      warn (_("Unrecognized form: %#lx\n"), form);
+      warn (_("Unrecognized form: %#lx"), form);
       /* What to do?  Consume a byte maybe?  */
       ++data;
       break;
@@ -2820,22 +2810,48 @@ read_and_display_attr_value (unsigned long attribute,
 		    "(%#" PRIx64 " and %#" PRIx64 ")"),
 		  debug_info_p->cu_offset,
 		  debug_info_p->loclists_base, uvalue);
+	  svalue = uvalue;
+	  if (svalue < 0)
+	    {
+	      warn (_("CU @ %#" PRIx64 " has has a negative loclists_base "
+		      "value of %#" PRIx64 " - treating as zero"),
+		    debug_info_p->cu_offset, svalue);
+	      uvalue = 0;
+	    }
 	  debug_info_p->loclists_base = uvalue;
 	  break;
+
 	case DW_AT_rnglists_base:
 	  if (debug_info_p->rnglists_base)
 	    warn (_("CU @ %#" PRIx64 " has multiple rnglists_base values "
 		    "(%#" PRIx64 " and %#" PRIx64 ")"),
 		  debug_info_p->cu_offset,
 		  debug_info_p->rnglists_base, uvalue);
+	  svalue = uvalue;
+	  if (svalue < 0)
+	    {
+	      warn (_("CU @ %#" PRIx64 " has has a negative rnglists_base "
+		      "value of %#" PRIx64 " - treating as zero"),
+		    debug_info_p->cu_offset, svalue);
+	      uvalue = 0;
+	    }
 	  debug_info_p->rnglists_base = uvalue;
 	  break;
+
 	case DW_AT_str_offsets_base:
 	  if (debug_info_p->str_offsets_base)
 	    warn (_("CU @ %#" PRIx64 " has multiple str_offsets_base values "
 		    "%#" PRIx64 " and %#" PRIx64 ")"),
 		  debug_info_p->cu_offset,
 		  debug_info_p->str_offsets_base, uvalue);
+	  svalue = uvalue;
+	  if (svalue < 0)
+	    {
+	      warn (_("CU @ %#" PRIx64 " has has a negative stroffsets_base "
+		      "value of %#" PRIx64 " - treating as zero"),
+		    debug_info_p->cu_offset, svalue);
+	      uvalue = 0;
+	    }
 	  debug_info_p->str_offsets_base = uvalue;
 	  break;
 
@@ -2905,8 +2921,14 @@ read_and_display_attr_value (unsigned long attribute,
 		}
 	      else
 		{
-		  assert (debug_info_p->num_loc_views <= num);
-		  num = debug_info_p->num_loc_views;
+		  if (debug_info_p->num_loc_views > num)
+		    {
+		      warn (_("The number of views (%u) is greater than the number of locations (%u)\n"),
+			    debug_info_p->num_loc_views, num);
+		      debug_info_p->num_loc_views = num;
+		    }
+		  else
+		    num = debug_info_p->num_loc_views;
 		  if (num > debug_info_p->num_loc_offsets)
 		    warn (_("More DW_AT_GNU_locview attributes than location offset attributes\n"));
 		  else
@@ -4648,7 +4670,7 @@ display_debug_lines_raw (struct dwarf_section *  section,
 	  while (data < end_of_sequence)
 	    {
 	      unsigned char op_code;
-	      int64_t adv;
+	      int adv;
 	      uint64_t uladv;
 
 	      printf ("  [0x%08tx]", data - start);
@@ -4695,7 +4717,7 @@ display_debug_lines_raw (struct dwarf_section *  section,
 		    }
 		  adv = (op_code % linfo.li_line_range) + linfo.li_line_base;
 		  state_machine_regs.line += adv;
-		  printf (_(" and Line by %" PRId64 " to %d"),
+		  printf (_(" and Line by %d to %d"),
 			  adv, state_machine_regs.line);
 		  if (verbose_view || state_machine_regs.view)
 		    printf (_(" (view %u)\n"), state_machine_regs.view);
@@ -4760,7 +4782,7 @@ display_debug_lines_raw (struct dwarf_section *  section,
 		  case DW_LNS_advance_line:
 		    READ_SLEB (adv, data, end);
 		    state_machine_regs.line += adv;
-		    printf (_("  Advance Line by %" PRId64 " to %d\n"),
+		    printf (_("  Advance Line by %d to %d\n"),
 			    adv, state_machine_regs.line);
 		    break;
 
@@ -4780,7 +4802,7 @@ display_debug_lines_raw (struct dwarf_section *  section,
 		  case DW_LNS_negate_stmt:
 		    adv = state_machine_regs.is_stmt;
 		    adv = ! adv;
-		    printf (_("  Set is_stmt to %" PRId64 "\n"), adv);
+		    printf (_("  Set is_stmt to %d\n"), adv);
 		    state_machine_regs.is_stmt = adv;
 		    break;
 
@@ -4975,6 +4997,12 @@ display_debug_lines_decoded (struct dwarf_section *  section,
 
 	      if (n_directories == 0)
 		directory_table = NULL;
+	      else if (n_directories > section->size)
+		{
+		  warn (_("number of directories (0x%x) exceeds size of section %s\n"),
+			n_directories, section->name);
+		  return 0;
+		}
 	      else
 		directory_table = (char **)
 		  xcalloc (n_directories, sizeof (unsigned char *));
@@ -5033,6 +5061,7 @@ display_debug_lines_decoded (struct dwarf_section *  section,
 	      if (do_checks && format_count > 5)
 		warn (_("Unexpectedly large number of columns in the file name table (%u)\n"),
 		      format_count);
+
 	      format_start = data;
 	      for (formati = 0; formati < format_count; formati++)
 		{
@@ -5049,6 +5078,12 @@ display_debug_lines_decoded (struct dwarf_section *  section,
 
 	      if (n_files == 0)
 		file_table = NULL;
+	      else if (n_files > section->size)
+		{
+		  warn (_("number of files (0x%x) exceeds size of section %s\n"),
+			n_files, section->name);
+		  return 0;
+		}
 	      else
 		file_table = (File_Entry *) xcalloc (n_files,
 						     sizeof (File_Entry));
@@ -5246,7 +5281,12 @@ display_debug_lines_decoded (struct dwarf_section *  section,
 	    }
 
 	  if (n_files > 0)
-	    printf (_("File name                            Line number    Starting address    View    Stmt\n"));
+	    {
+	      if (do_wide)
+		printf (_("File name                            Line number    Starting address    View    Stmt\n"));
+	      else
+		printf (_("File name                        Line number    Starting address    View    Stmt\n"));
+	    }
 	  else
 	    printf (_("CU: Empty file name table\n"));
 	  saved_linfo = linfo;
@@ -5572,23 +5612,23 @@ display_debug_lines_decoded (struct dwarf_section *  section,
 		  if (linfo.li_max_ops_per_insn == 1)
 		    {
 		      if (xop == -DW_LNE_end_sequence)
-			printf ("%-35s  %11s  %#18" PRIx64,
+			printf ("%-31s  %11s  %#18" PRIx64,
 				newFileName, "-",
 				state_machine_regs.address);
 		      else
-			printf ("%-35s  %11d  %#18" PRIx64,
+			printf ("%-31s  %11d  %#18" PRIx64,
 				newFileName, state_machine_regs.line,
 				state_machine_regs.address);
 		    }
 		  else
 		    {
 		      if (xop == -DW_LNE_end_sequence)
-			printf ("%-35s  %11s  %#18" PRIx64 "[%d]",
+			printf ("%-31s  %11s  %#18" PRIx64 "[%d]",
 				newFileName, "-",
 				state_machine_regs.address,
 				state_machine_regs.op_index);
 		      else
-			printf ("%-35s  %11d  %#18" PRIx64 "[%d]",
+			printf ("%-31s  %11d  %#18" PRIx64 "[%d]",
 				newFileName, state_machine_regs.line,
 				state_machine_regs.address,
 				state_machine_regs.op_index);
@@ -8240,7 +8280,7 @@ display_debug_ranges (struct dwarf_section *section,
     }
 
   introduce (section, false);
-
+  
   if (is_rnglists)
     return display_debug_rnglists (section);
 
@@ -8319,7 +8359,7 @@ display_debug_ranges (struct dwarf_section *section,
 	}
 
       next = section_begin + offset + debug_info_p->rnglists_base;
-
+      
       /* If multiple DWARF entities reference the same range then we will
 	 have multiple entries in the `range_entries' list for the same
 	 offset.  Thanks to the sort above these will all be consecutive in
@@ -10706,6 +10746,10 @@ display_gdb_index (struct dwarf_section *section,
 static void
 prealloc_cu_tu_list (unsigned int nshndx)
 {
+  if (nshndx == 0)
+    /* Always allocate at least one entry for the end-marker.  */
+    nshndx = 1;
+
   if (shndx_pool == NULL)
     {
       shndx_pool_size = nshndx;
@@ -10770,7 +10814,7 @@ get_DW_SECT_short_name (unsigned int dw_sect)
    These sections are extensions for Fission.
    See http://gcc.gnu.org/wiki/DebugFissionDWP.  */
 
-static int
+static bool
 process_cu_tu_index (struct dwarf_section *section, int do_display)
 {
   unsigned char *phdr = section->start;
@@ -10791,14 +10835,14 @@ process_cu_tu_index (struct dwarf_section *section, int do_display)
   if (phdr == NULL)
     {
       warn (_("Section %s is empty\n"), section->name);
-      return 0;
+      return false;
     }
   /* PR 17512: file: 002-376-0.004.  */
   if (section->size < 24)
     {
       warn (_("Section %s is too small to contain a CU/TU header\n"),
 	    section->name);
-      return 0;
+      return false;
     }
 
   phash = phdr;
@@ -10830,7 +10874,7 @@ process_cu_tu_index (struct dwarf_section *section, int do_display)
 		      "Section %s is too small for %u slots\n",
 		      nslots),
 	    section->name, nslots);
-      return 0;
+      return false;
     }
 
   if (version == 1)
@@ -10860,7 +10904,7 @@ process_cu_tu_index (struct dwarf_section *section, int do_display)
 		if (shndx_list < ppool)
 		  {
 		    warn (_("Section index pool located before start of section\n"));
-		    return 0;
+		    return false;
 		  }
 
 		printf (_("  [%3d] Signature:  %#" PRIx64 "  Sections: "),
@@ -10871,7 +10915,7 @@ process_cu_tu_index (struct dwarf_section *section, int do_display)
 		      {
 			warn (_("Section %s too small for shndx pool\n"),
 			      section->name);
-			return 0;
+			return false;
 		      }
 		    SAFE_BYTE_GET (shndx, shndx_list, 4, limit);
 		    if (shndx == 0)
@@ -10907,11 +10951,14 @@ process_cu_tu_index (struct dwarf_section *section, int do_display)
       if (nused == -1u
 	  || _mul_overflow ((size_t) ncols, 4, &temp)
 	  || _mul_overflow ((size_t) nused + 1, temp, &total)
+	  || total > (size_t) (limit - ppool)
+	  /* PR 30227: ncols could be 0.  */
+	  || _mul_overflow ((size_t) nused + 1, 4, &total)
 	  || total > (size_t) (limit - ppool))
 	{
 	  warn (_("Section %s too small for offset and size tables\n"),
 		section->name);
-	  return 0;
+	  return false;
 	}
 
       if (do_display)
@@ -10959,7 +11006,7 @@ process_cu_tu_index (struct dwarf_section *section, int do_display)
 		{
 		  warn (_("Row index (%u) is larger than number of used entries (%u)\n"),
 			row, nused);
-		  return 0;
+		  return false;
 		}
 
 	      if (!do_display)
@@ -11044,7 +11091,7 @@ process_cu_tu_index (struct dwarf_section *section, int do_display)
 			printf ("\n");
 		      warn (_("Too many rows/columns in DWARF index section %s\n"),
 			    section->name);
-		      return 0;
+		      return false;
 		    }
 
 		  SAFE_BYTE_GET (val, p, 4, limit);
@@ -11076,7 +11123,7 @@ process_cu_tu_index (struct dwarf_section *section, int do_display)
   if (do_display)
       printf ("\n");
 
-  return 1;
+  return true;
 }
 
 static int cu_tu_indexes_read = -1; /* Tri-state variable.  */

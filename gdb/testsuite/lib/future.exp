@@ -43,7 +43,6 @@ proc gdb_find_gnatmake {} {
 
 proc gdb_find_gdc {} {
     global tool_root_dir
-    print "Tool Root: $tool_root_dir"
 
     if {![is_remote host]} {
 	set file [lookfor_file $tool_root_dir gdc]
@@ -58,7 +57,7 @@ proc gdb_find_gdc {} {
     } else {
 	set CC [transform gdc]
     }
-    print "CC: $CC"
+
     return $CC
 }
 
@@ -125,8 +124,11 @@ proc gdb_find_hipcc {} {
     global tool_root_dir
     if {![is_remote host]} {
 	set hipcc [lookfor_file $tool_root_dir hipcc]
-	if {$hipcc == ""} {
-	    set hipcc [lookfor_file /opt/rocm/bin hipcc]
+	if {$hipcc eq "" && [info exists ::env(ROCM_PATH)]} {
+	    set hipcc [lookfor_file $::env(ROCM_PATH)/bin hipcc]
+	}
+	if {$hipcc eq ""} {
+	    set hipcc hipcc
 	}
     } else {
 	set hipcc ""

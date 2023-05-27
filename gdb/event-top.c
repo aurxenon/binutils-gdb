@@ -21,6 +21,7 @@
 
 #include "defs.h"
 #include "top.h"
+#include "ui.h"
 #include "inferior.h"
 #include "infrun.h"
 #include "target.h"
@@ -36,7 +37,6 @@
 #include "gdbcmd.h"		/* for dont_repeat() */
 #include "annotate.h"
 #include "maint.h"
-#include "gdbsupport/buffer.h"
 #include "ser-event.h"
 #include "gdbsupport/gdb_select.h"
 #include "gdbsupport/gdb-sigmask.h"
@@ -481,12 +481,6 @@ top_level_prompt (void)
   return prompt;
 }
 
-/* See top.h.  */
-
-struct ui *main_ui;
-struct ui *current_ui;
-struct ui *ui_list;
-
 /* Get a reference to the current UI's line buffer.  This is used to
    construct a whole line of input from partial input.  */
 
@@ -494,77 +488,6 @@ static std::string &
 get_command_line_buffer (void)
 {
   return current_ui->line_buffer;
-}
-
-/* When there is an event ready on the stdin file descriptor, instead
-   of calling readline directly throught the callback function, or
-   instead of calling gdb_readline_no_editing_callback, give gdb a
-   chance to detect errors and do something.  */
-
-static void
-stdin_event_handler (int error, gdb_client_data client_data)
-{
-  struct ui *ui = (struct ui *) client_data;
-
-  if (error)
-    {
-      /* Switch to the main UI, so diagnostics always go there.  */
-      current_ui = main_ui;
-
-      ui->unregister_file_handler ();
-      if (main_ui == ui)
-	{
-	  /* If stdin died, we may as well kill gdb.  */
-	  gdb_printf (gdb_stderr, _("error detected on stdin\n"));
-	  quit_command ((char *) 0, 0);
-	}
-      else
-	{
-	  /* Simply delete the UI.  */
-	  delete ui;
-	}
-    }
-  else
-    {
-      /* Switch to the UI whose input descriptor woke up the event
-	 loop.  */
-      current_ui = ui;
-
-      /* This makes sure a ^C immediately followed by further input is
-	 always processed in that order.  E.g,. with input like
-	 "^Cprint 1\n", the SIGINT handler runs, marks the async
-	 signal handler, and then select/poll may return with stdin
-	 ready, instead of -1/EINTR.  The
-	 gdb.base/double-prompt-target-event-error.exp test exercises
-	 this.  */
-      QUIT;
-
-      do
-	{
-	  call_stdin_event_handler_again_p = 0;
-	  ui->call_readline (client_data);
-	}
-      while (call_stdin_event_handler_again_p != 0);
-    }
-}
-
-/* See top.h.  */
-
-void
-ui::register_file_handler ()
-{
-  if (input_fd != -1)
-    add_file_handler (input_fd, stdin_event_handler, this,
-		      string_printf ("ui-%d", num), true);
-}
-
-/* See top.h.  */
-
-void
-ui::unregister_file_handler ()
-{
-  if (input_fd != -1)
-    delete_file_handler (input_fd);
 }
 
 /* Re-enable stdin after the end of an execution command in
@@ -868,11 +791,8 @@ void
 gdb_readline_no_editing_callback (gdb_client_data client_data)
 {
   int c;
-  char *result;
-  struct buffer line_buffer;
+  std::string line_buffer;
   struct ui *ui = current_ui;
-
-  buffer_init (&line_buffer);
 
   FILE *stream = ui->instream != nullptr ? ui->instream : ui->stdin_stream;
   gdb_assert (stream != nullptr);
@@ -893,32 +813,28 @@ gdb_readline_no_editing_callback (gdb_client_data client_data)
 
       if (c == EOF)
 	{
-	  if (line_buffer.used_size > 0)
+	  if (!line_buffer.empty ())
 	    {
 	      /* The last line does not end with a newline.  Return it, and
 		 if we are called again fgetc will still return EOF and
 		 we'll return NULL then.  */
 	      break;
 	    }
-	  xfree (buffer_finish (&line_buffer));
 	  ui->input_handler (NULL);
 	  return;
 	}
 
       if (c == '\n')
 	{
-	  if (line_buffer.used_size > 0
-	      && line_buffer.buffer[line_buffer.used_size - 1] == '\r')
-	    line_buffer.used_size--;
+	  if (!line_buffer.empty () && line_buffer.back () == '\r')
+	    line_buffer.pop_back ();
 	  break;
 	}
 
-      buffer_grow_char (&line_buffer, c);
+      line_buffer += c;
     }
 
-  buffer_grow_char (&line_buffer, '\0');
-  result = buffer_finish (&line_buffer);
-  ui->input_handler (gdb::unique_xmalloc_ptr<char> (result));
+  ui->input_handler (make_unique_xstrdup (line_buffer.c_str ()));
 }
 
 
@@ -1217,7 +1133,15 @@ async_sigterm_handler (gdb_client_data arg)
 }
 
 /* See defs.h.  */
-volatile int sync_quit_force_run;
+volatile bool sync_quit_force_run;
+
+/* See defs.h.  */
+void
+set_force_quit_flag ()
+{
+  sync_quit_force_run = true;
+  set_quit_flag ();
+}
 
 /* Quit GDB if SIGTERM is received.
    GDB would quit anyway, but this way it will clean up properly.  */
@@ -1226,8 +1150,7 @@ handle_sigterm (int sig)
 {
   signal (sig, handle_sigterm);
 
-  sync_quit_force_run = 1;
-  set_quit_flag ();
+  set_force_quit_flag ();
 
   mark_async_signal_handler (async_sigterm_token);
 }
@@ -1289,6 +1212,8 @@ async_disconnect (gdb_client_data arg)
       gdb_puts ("Could not kill the program being debugged",
 		gdb_stderr);
       exception_print (gdb_stderr, exception);
+      if (exception.reason == RETURN_FORCED_QUIT)
+	throw;
     }
 
   for (inferior *inf : all_inferiors ())

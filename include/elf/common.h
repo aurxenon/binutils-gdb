@@ -492,6 +492,7 @@
 #define PT_GNU_SFRAME	(PT_LOOS + 0x474e554) /* SFrame stack trace information */
 
 /* OpenBSD segment types.  */
+#define PT_OPENBSD_MUTABLE   (PT_LOOS + 0x5a3dbe5)  /* Like bss, but not immutable.  */
 #define PT_OPENBSD_RANDOMIZE (PT_LOOS + 0x5a3dbe6)  /* Fill with random data.  */
 #define PT_OPENBSD_WXNEEDED  (PT_LOOS + 0x5a3dbe7)  /* Program does W^X violations.  */
 #define PT_OPENBSD_BOOTDATA  (PT_LOOS + 0x5a41be6)  /* Section for boot arguments.  */
@@ -768,6 +769,19 @@
 #define NT_OPENBSD_XFPREGS	22
 #define NT_OPENBSD_WCOOKIE	23
 
+/* Note segments for core files on QNX systems.  Note name
+   must start with "QNX".  */
+#define QNT_DEBUG_FULLPATH 1
+#define QNT_DEBUG_RELOC    2
+#define QNT_STACK          3
+#define QNT_GENERATOR      4
+#define QNT_DEFAULT_LIB    5
+#define QNT_CORE_SYSINFO   6
+#define QNT_CORE_INFO      7
+#define QNT_CORE_STATUS    8
+#define QNT_CORE_GREG      9
+#define QNT_CORE_FPREG     10
+#define QNT_LINK_MAP       11
 
 /* Note segments for core files on Solaris systems.  Note name
    must start with "CORE".  */
@@ -1121,13 +1135,16 @@
 #define DT_FINI_ARRAYSZ 28
 #define DT_RUNPATH	29
 #define DT_FLAGS	30
+
+/* Values in the range [DT_ENCODING, DT_LOOS) use d_un.d_ptr if the
+   value is even, d_un.d_val if odd.  */
+#define DT_ENCODING	32
 #define DT_PREINIT_ARRAY   32
 #define DT_PREINIT_ARRAYSZ 33
 #define DT_SYMTAB_SHNDX    34
 #define DT_RELRSZ	35
 #define DT_RELR		36
 #define DT_RELRENT	37
-#define DT_ENCODING	38
 
 /* Note, the Oct 4, 1999 draft of the ELF ABI changed the values
    for DT_LOOS and DT_HIOS.  Some implementations however, use

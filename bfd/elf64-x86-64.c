@@ -389,7 +389,8 @@ elf_x86_64_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
       default:
 	return false;
 
-      case 124:		/* sizeof(struct elf_prpsinfo) on Linux/x32 */
+      case 124:
+	/* sizeof (struct elf_external_linux_prpsinfo32_ugid16).  */
 	elf_tdata (abfd)->core->pid
 	  = bfd_get_32 (abfd, note->descdata + 12);
 	elf_tdata (abfd)->core->program
@@ -398,7 +399,18 @@ elf_x86_64_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
 	  = _bfd_elfcore_strndup (abfd, note->descdata + 44, 80);
 	break;
 
-      case 136:		/* sizeof(struct elf_prpsinfo) on Linux/x86_64 */
+    case 128:
+	/* sizeof (struct elf_external_linux_prpsinfo32_ugid32).  */
+	elf_tdata (abfd)->core->pid
+	  = bfd_get_32 (abfd, note->descdata + 12);
+	elf_tdata (abfd)->core->program
+	  = _bfd_elfcore_strndup (abfd, note->descdata + 32, 16);
+	elf_tdata (abfd)->core->command
+	  = _bfd_elfcore_strndup (abfd, note->descdata + 48, 80);
+	break;
+
+      case 136:
+	/* sizeof (struct elf_prpsinfo) on Linux/x86_64.  */
 	elf_tdata (abfd)->core->pid
 	  = bfd_get_32 (abfd, note->descdata + 24);
 	elf_tdata (abfd)->core->program
@@ -1241,7 +1253,7 @@ elf_x86_64_check_tls_transition (bfd *abfd,
 	  if (largepic)
 	    return r_type == R_X86_64_PLTOFF64;
 	  else if (indirect_call)
-	    return r_type == R_X86_64_GOTPCRELX;
+	    return (r_type == R_X86_64_GOTPCRELX || r_type == R_X86_64_GOTPCREL);
 	  else
 	    return (r_type == R_X86_64_PC32 || r_type == R_X86_64_PLT32);
 	}
@@ -4967,7 +4979,9 @@ elf_x86_64_get_synthetic_symtab (bfd *abfd,
   for (j = 0; plts[j].name != NULL; j++)
     {
       plt = bfd_get_section_by_name (abfd, plts[j].name);
-      if (plt == NULL || plt->size == 0)
+      if (plt == NULL
+	  || plt->size == 0
+	  || (plt->flags & SEC_HAS_CONTENTS) == 0)
 	continue;
 
       /* Get the PLT section contents.  */

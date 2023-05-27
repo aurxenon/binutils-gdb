@@ -1,4 +1,4 @@
-# Copyright 2022 Free Software Foundation, Inc.
+# Copyright 2022-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,6 +14,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Basic DAP test.
+
+require allow_dap_tests
 
 load_lib dap-support.exp
 
@@ -160,5 +162,13 @@ set obj [dap_check_request_and_response "disassemble one instruction" \
 		  $insn_pc]]
 set response [lindex $obj 0]
 gdb_assert { [dict exists $response body instructions] } "instructions in disassemble output"
+
+set obj [dap_check_request_and_response "command repl" \
+	     evaluate {o expression [s {output 23}] context [s repl]}]
+set response [lindex $obj 0]
+gdb_assert {[dict get $response body result] == 23}
+
+set obj [dap_check_request_and_response sources loadedSources]
+gdb_assert {[string first basic-dap.c $obj] != -1}
 
 dap_shutdown

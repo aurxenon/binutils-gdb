@@ -21,6 +21,7 @@
    conventions, et.al.  */
 
 #include "defs.h"
+#include "top.h"		/* For quit_force().  */
 #include "arch-utils.h"
 #include "value.h"
 #include "gdbtypes.h"
@@ -131,6 +132,10 @@ tyscm_type_name (struct type *type)
       current_language->print_type (type, "", &stb, -1, 0,
 				    &type_print_raw_options);
       return stb.release ();
+    }
+  catch (const gdb_exception_forced_quit &except)
+    {
+      quit_force (NULL, 0);
     }
   catch (const gdb_exception &except)
     {
@@ -822,12 +827,12 @@ gdbscm_type_range (SCM self)
     case TYPE_CODE_ARRAY:
     case TYPE_CODE_STRING:
     case TYPE_CODE_RANGE:
-      if (type->bounds ()->low.kind () == PROP_CONST)
+      if (type->bounds ()->low.is_constant ())
 	low = type->bounds ()->low.const_val ();
       else
 	low = 0;
 
-      if (type->bounds ()->high.kind () == PROP_CONST)
+      if (type->bounds ()->high.is_constant ())
 	high = type->bounds ()->high.const_val ();
       else
 	high = 0;

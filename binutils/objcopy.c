@@ -20,7 +20,6 @@
 
 #include "sysdep.h"
 #include "bfd.h"
-#include "progress.h"
 #include "getopt.h"
 #include "libiberty.h"
 #include "bucomm.h"
@@ -1066,6 +1065,10 @@ delete_symbol_htabs (void)
   htab_delete (weaken_specific_htab);
   htab_delete (redefine_specific_htab);
   htab_delete (redefine_specific_reverse_htab);
+
+  free (isympp);
+  if (osympp != isympp)
+    free (osympp);
 }
 
 /* Add a symbol to strip_specific_list.  */
@@ -3334,14 +3337,11 @@ copy_object (bfd *ibfd, bfd *obfd, const bfd_arch_info_type *input_arch)
       symcount = filter_symbols (ibfd, obfd, osympp, isympp, symcount);
     }
 
-  if (convert_debugging && dhandle != NULL)
+  if (dhandle != NULL)
     {
       bool res;
 
       res = write_debugging_info (obfd, dhandle, &symcount, &osympp);
-
-      free (dhandle);
-      dhandle = NULL; /* Paranoia...  */
 
       if (! res)
 	{
@@ -3625,8 +3625,7 @@ copy_archive (bfd *ibfd, bfd *obfd, const char *output_target,
   while (!status && this_element != NULL)
     {
       char *output_name;
-      bfd *output_bfd;
-      bfd *last_element;
+      bfd *output_element;
       struct stat buf;
       int stat_status = 0;
       bool del = true;
@@ -3638,6 +3637,7 @@ copy_archive (bfd *ibfd, bfd *obfd, const char *output_target,
 	{
 	  non_fatal (_("illegal pathname found in archive member: %s"),
 		     bfd_get_filename (this_element));
+	  bfd_close (this_element);
 	  status = 1;
 	  goto cleanup_and_exit;
 	}
@@ -3656,6 +3656,7 @@ copy_archive (bfd *ibfd, bfd *obfd, const char *output_target,
 	    {
 	      non_fatal (_("cannot create tempdir for archive copying (error: %s)"),
 			 strerror (errno));
+	      bfd_close (this_element);
 	      status = 1;
 	      goto cleanup_and_exit;
 	    }
@@ -3693,20 +3694,21 @@ copy_archive (bfd *ibfd, bfd *obfd, const char *output_target,
       /* PR binutils/3110: Cope with archives
 	 containing multiple target types.  */
       if (force_output_target || !ok_object)
-	output_bfd = bfd_openw (output_name, output_target);
+	output_element = bfd_openw (output_name, output_target);
       else
-	output_bfd = bfd_openw (output_name, bfd_get_target (this_element));
+	output_element = bfd_openw (output_name, bfd_get_target (this_element));
 
-      if (output_bfd == NULL)
+      if (output_element == NULL)
 	{
 	  bfd_nonfatal_message (output_name, NULL, NULL, NULL);
+	  bfd_close (this_element);
 	  status = 1;
 	  goto cleanup_and_exit;
 	}
 
       if (ok_object)
 	{
-	  del = !copy_object (this_element, output_bfd, input_arch);
+	  del = !copy_object (this_element, output_element, input_arch);
 
 	  if (del && bfd_get_arch (this_element) == bfd_arch_unknown)
 	    /* Try again as an unknown object file.  */
@@ -3714,10 +3716,10 @@ copy_archive (bfd *ibfd, bfd *obfd, const char *output_target,
 	}
 
       if (!ok_object)
-	del = !copy_unknown_object (this_element, output_bfd);
+	del = !copy_unknown_object (this_element, output_element);
 
       if (!(ok_object && !del && !status
-	    ? bfd_close : bfd_close_all_done) (output_bfd))
+	    ? bfd_close : bfd_close_all_done) (output_element))
 	{
 	  bfd_nonfatal_message (output_name, NULL, NULL, NULL);
 	  /* Error in new object file. Don't change archive.  */
@@ -3729,23 +3731,24 @@ copy_archive (bfd *ibfd, bfd *obfd, const char *output_target,
 	  unlink (output_name);
 	  status = 1;
 	}
+
+      if (status)
+	bfd_close (this_element);
       else
 	{
 	  if (preserve_dates && stat_status == 0)
 	    set_times (output_name, &buf);
 
-	  /* Open the newly output file and attach to our list.  */
-	  output_bfd = bfd_openr (output_name, output_target);
+	  /* Open the newly created output file and attach to our list.  */
+	  output_element = bfd_openr (output_name, output_target);
 
-	  l->obfd = output_bfd;
+	  l->obfd = output_element;
 
-	  *ptr = output_bfd;
-	  ptr = &output_bfd->archive_next;
+	  *ptr = output_element;
+	  ptr = &output_element->archive_next;
 
-	  last_element = this_element;
-
+	  bfd *last_element = this_element;
 	  this_element = bfd_openr_next_archived_file (ibfd, last_element);
-
 	  bfd_close (last_element);
 	}
     }
@@ -3934,14 +3937,12 @@ copy_file (const char *input_filename, const char *output_filename, int ofd,
 	{
 	  status = 1;
 	  bfd_nonfatal_message (output_filename, NULL, NULL, NULL);
-	  return;
 	}
 
       if (!bfd_close (ibfd))
 	{
 	  status = 1;
 	  bfd_nonfatal_message (input_filename, NULL, NULL, NULL);
-	  return;
 	}
     }
   else
@@ -4659,6 +4660,7 @@ write_debugging_info (bfd *obfd, void *dhandle,
       bfd_size_type symsize, stringsize;
       asection *stabsec, *stabstrsec;
       flagword flags;
+      bool ret;
 
       if (! write_stabs_in_sections_debugging_info (obfd, dhandle, &syms,
 						    &symsize, &strings,
@@ -4668,6 +4670,7 @@ write_debugging_info (bfd *obfd, void *dhandle,
       flags = SEC_HAS_CONTENTS | SEC_READONLY | SEC_DEBUGGING;
       stabsec = bfd_make_section_with_flags (obfd, ".stab", flags);
       stabstrsec = bfd_make_section_with_flags (obfd, ".stabstr", flags);
+      ret = true;
       if (stabsec == NULL
 	  || stabstrsec == NULL
 	  || !bfd_set_section_size (stabsec, symsize)
@@ -4677,25 +4680,26 @@ write_debugging_info (bfd *obfd, void *dhandle,
 	{
 	  bfd_nonfatal_message (NULL, obfd, NULL,
 				_("can't create debugging section"));
-	  free (strings);
-	  return false;
+	  ret = false;
 	}
 
       /* We can get away with setting the section contents now because
 	 the next thing the caller is going to do is copy over the
 	 real sections.  We may someday have to split the contents
 	 setting out of this function.  */
-      if (! bfd_set_section_contents (obfd, stabsec, syms, 0, symsize)
-	  || ! bfd_set_section_contents (obfd, stabstrsec, strings, 0,
-					 stringsize))
+      if (ret
+	  && (!bfd_set_section_contents (obfd, stabsec, syms, 0, symsize)
+	      || !bfd_set_section_contents (obfd, stabstrsec, strings, 0,
+					    stringsize)))
 	{
 	  bfd_nonfatal_message (NULL, obfd, NULL,
 				_("can't set debugging section contents"));
-	  free (strings);
-	  return false;
+	  ret = false;
 	}
 
-      return true;
+      free (strings);
+      free (syms);
+      return ret;
     }
 
   bfd_nonfatal_message (NULL, obfd, NULL,
@@ -6055,8 +6059,6 @@ main (int argc, char *argv[])
   program_name = argv[0];
   xmalloc_set_program_name (program_name);
 
-  START_PROGRESS (program_name, 0);
-
   expandargv (&argc, &argv);
 
   strip_symbols = STRIP_UNDEF;
@@ -6091,7 +6093,6 @@ main (int argc, char *argv[])
   else
     copy_main (argc, argv);
 
-  END_PROGRESS (program_name);
-
+  xexit (status);
   return status;
 }

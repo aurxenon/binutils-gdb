@@ -1,3 +1,162 @@
+2023-05-17  Luca Bacci  <luca.bacci@outlook.com>
+
+	PR 30421
+	* emultempl/pe.em (set_decoration): New function.
+	(pe_fixup_stdcalls): Call the new function.
+	* emultempl/pep.em (set_decoration): New function.
+	(pep_fixup_stdcalls): Call the new function.
+	* pe-dll.c (make_one): Check for decoated symbols.
+
+2023-05-16  Nick Clifton  <nickc@redhat.com>
+
+	PR 30359
+	* ld.texi (WIN32): Document how to create a resource only DLL.
+
+2023-05-16  Nick Clifton  <nickc@redhat.com>
+
+	* ld.texi (-Ur): Clarify the actions of this option.
+
+2023-05-10  Nick Clifton  <nickc@redhat.com>
+
+	PR 16566
+	* ldlang.c (ld_is_local_symbol): New function.
+	(print_input_section): Add code to display local symbols in the
+	section.
+	* ldlex.h (enum option_values): Add OPTION_PRINT_MAP_LOCALS and
+	OPTION_PRINT_MAP_LOCALS.
+	* lexsup.c (ld_options[]): Add entries for --print-map-locals
+	and --no-print-map-locals.
+	* NEWS: Mention the new feature.
+	* ld.h (struct ld_config_type): Add print_map_locals field.
+	* ld.texi: Document the new command line option.
+	* testsuite/ld-scripts/sizeof.s: Add a local symbol.
+	* testsuite/ld-scripts/map-locals.d: New test control file.
+	* testsuite/ld-scripts/map-address.exp: Run the new test.
+
+2023-05-04  Nick Clifton  <nickc@redhat.com>
+
+	PR 30300
+	* emultempl/pep.em (set_entry_point): Add an undefined reference
+	to the entry point if it has been constructed heuristically.
+	* emultempl/pe.em (set_entry_point): Likewise.
+
+2023-05-04  Dimitar Dimitrov  <dimitar@dinux.eu>
+
+	* scripttempl/pru.sc (OUTPUT_SECTION_ALIGN): New helper variable
+	to place at end of DMEM output sections.
+	(.data): Use the helper variable.
+	(.eh_frame): New output section.
+	(.gnu_extab): Ditto.
+	(.gcc_except_table): Ditto.
+	(.resource_table): Use the helper variable.
+
+2023-04-27  Nick Clifton  <nickc@redhat.com>
+
+	* ldmisc.c (vfinfo): Add support for %x and %lx.
+
+2023-04-18  mengqinggang  <mengqinggang@loongson.cn>
+
+	* testsuite/ld-loongarch-elf/macro_op.d: Regenerated.
+
+2023-04-17  Nick Clifton  <nickc@redhat.com>
+
+	PR 30354
+	* emulparams/armelf.sh (OTHER_PLT_SECTIONS): Define in order to
+	handle the .gnu.sgstubs section.
+
+2023-04-13  Claudiu Zissulescu  <claziss@synopsys.com>
+
+	* testsuite/ld-arc/arc.exp: Update execution predicate.
+	* testsuite/ld-arc/nps-1a.d: Add linker script option.
+	* testsuite/ld-arc/nps-1b.d: Likewise.
+	* testsuite/ld-arc/relax-local-pic.d: Update matching patterns.
+
+2023-04-12  Nick Clifton  <nickc@redhat.com>
+
+	* ld.texi (--enable-non-contiguous-regions): Fix typos in script
+	example.
+
+2023-03-15  Nick Clifton  <nickc@redhat.com>
+
+	PR 30187
+	* NEWS: Mention the new feature.
+	* ld.texi: Document the new feature.
+	* ldgram.y: Handle LINKER_VERSION token.
+	* ldlang.c (lang_add_version): New function.
+	(enable_linker_version): New global variable.
+	* ldlang.h (land_add_version): Prototype.
+	(enable_linker_version): Export.
+	* ldlex.h (OPTION_ENABLE_LINKER_VERSION): Define.
+	(OPTION_DISABLE_LINKER_VERSION): Define.
+	* ldlex.l (LINKER_VERSION): Add token.
+	* lexsup.c (ld_options): Add --enable-linker-version and
+	--disable-linker-version.
+	(parse_args): Handle the new options.
+	* scripttempl/arclinux.sc: Remove stabs and comment sections and
+	replace with inclusion of misc-sections.sc
+	* scripttempl/avr.sc: Likewise.
+	* scripttempl/dlx.sc: Likewise.
+	* scripttempl/elf.sc: Likewise.
+	* scripttempl/elf32cr16.sc: Likewise.
+	* scripttempl/elf32crx.sc: Likewise.
+	* scripttempl/elf32msp430.sc: Likewise.
+	* scripttempl/elf64bpf.sc: Likewise.
+	* scripttempl/elf64hppa.sc: Likewise.
+	* scripttempl/elf_chaos.sc: Likewise.
+	* scripttempl/elfarc.sc: Likewise.
+	* scripttempl/elfarcv2.sc: Likewise.
+	* scripttempl/elfd10v.sc: Likewise.
+	* scripttempl/elfd30v.sc: Likewise.
+	* scripttempl/elfm68hc11.sc: Likewise.
+	* scripttempl/elfm68hc12.sc: Likewise.
+	* scripttempl/elfm9s12z.sc: Likewise.
+	* scripttempl/elfmicroblaze.sc: Likewise.
+	* scripttempl/elfxgate.sc: Likewise.
+	* scripttempl/elfxtensa.sc: Likewise.
+	* scripttempl/epiphany_4x4.sc: Likewise.
+	* scripttempl/ft32.sc: Likewise.
+	* scripttempl/ip2k.sc: Likewise.
+	* scripttempl/iq2000.sc: Likewise.
+	* scripttempl/mep.sc: Likewise.
+	* scripttempl/nds32elf.sc: Likewise.
+	* scripttempl/pru.sc: Likewise.
+	* scripttempl/v850.sc: Likewise.
+	* scripttempl/v850_rh850.sc: Likewise.
+	* scripttempl/visium.sc: Likewise.
+	* scripttempl/xstormy16.sc: Likewise.
+	* scripttempl/z80.sc: Likewise.
+	* testsuite/ld-scripts/script.exp: Run new tests.
+	* scripttempl/misc-sections.sc: New file.
+	* testsuite/ld-scripts/ld-version-2.d: New file.
+	* testsuite/ld-scripts/ld-version.d: New file.
+	* testsuite/ld-scripts/ld-version.t: New file.
+
+2023-02-23  Fangrui Song  <i@maskray.me>
+
+	* emultempl/riscvelf.em: Add option parsing.
+	* testsuite/ld-riscv-elf/code-model-relax-medlow-01-norelaxgp.d: New.
+	* testsuite/ld-riscv-elf/pcgp-relax-01-norelaxgp.d: New.
+	* testsuite/ld-riscv-elf/pcgp-relax-02.d: Test --relax --relax-gp can be
+	used together.
+
+2023-02-20  Nick Clifton  <nickc@redhat.com>
+
+	PR 30004
+	* pe-dll.c (pe_dll_build_sections): Do not build an edata section
+	if all symbols are being excluded.
+
+2023-02-15  Nick Clifton  <nickc@redhat.com>
+
+	PR 30078
+	* testsuite/ld-elf/merge4b.s: Use .asciz instead of .string in
+	order to avoid the special behaviour of the .string directive on
+	HPPA architectures.
+
+2023-02-14  Nick Clifton  <nickc@redhat.com>
+
+	* ld.texi (Plugins): Mention that the -plugin command line option
+	is used to load plugins.
+
 2023-01-27  Nick Clifton  <nickc@redhat.com>
 
 	PR 29998

@@ -472,14 +472,6 @@ enable_break_failure_warning (void)
 	   "and track explicitly loaded dynamic code."));
 }
 
-/* Helper function for gdb_bfd_lookup_symbol.  */
-
-static int
-cmp_name (const asymbol *sym, const void *data)
-{
-  return (strcmp (sym->name, (const char *) data) == 0);
-}
-
 /* Arrange for dynamic linker to hit breakpoint.
 
    The dynamic linkers has, as part of its debugger interface, support
@@ -602,7 +594,12 @@ enable_break2 (void)
 	    interp_plt_sect_low + bfd_section_size (interp_sect);
 	}
 
-      addr = gdb_bfd_lookup_symbol (tmp_bfd.get (), cmp_name, "_dl_debug_addr");
+      addr = (gdb_bfd_lookup_symbol
+	      (tmp_bfd.get (),
+	       [] (const asymbol *sym)
+	       {
+		 return strcmp (sym->name, "_dl_debug_addr") == 0;
+	       }));
 
       if (addr == 0)
 	{
@@ -730,7 +727,6 @@ frv_relocate_main_executable (void)
   CORE_ADDR exec_addr, interp_addr;
   struct int_elf32_fdpic_loadmap *ldm;
   int changed;
-  struct obj_section *osect;
 
   status = frv_fdpic_loadmap_addresses (target_gdbarch (),
 					&interp_addr, &exec_addr);
@@ -754,13 +750,13 @@ frv_relocate_main_executable (void)
   section_offsets new_offsets (objf->section_offsets.size ());
   changed = 0;
 
-  ALL_OBJFILE_OSECTIONS (objf, osect)
+  for (obj_section *osect : objf->sections ())
     {
       CORE_ADDR orig_addr, addr, offset;
       int osect_idx;
       int seg;
       
-      osect_idx = osect - objf->sections;
+      osect_idx = osect - objf->sections_start;
 
       /* Current address of section.  */
       addr = osect->addr ();

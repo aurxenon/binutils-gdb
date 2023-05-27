@@ -44,7 +44,7 @@ convert_array (compile_c_instance *context, struct type *type)
 
   element_type = context->convert_type (type->target_type ());
 
-  if (range->bounds ()->low.kind () != PROP_CONST)
+  if (!range->bounds ()->low.is_constant ())
     return context->plugin ().error (_("array type with non-constant"
 				       " lower bound is not supported"));
   if (range->bounds ()->low.const_val () != 0)
@@ -164,10 +164,7 @@ convert_func (compile_c_instance *context, struct type *type)
      GDB's parser used to do.  */
   if (target_type == NULL)
     {
-      if (type->is_objfile_owned ())
-	target_type = objfile_type (type->objfile_owner ())->builtin_int;
-      else
-	target_type = builtin_type (type->arch_owner ())->builtin_int;
+      target_type = builtin_type (type->arch ())->builtin_int;
       warning (_("function has unknown return type; assuming int"));
     }
 
@@ -322,11 +319,7 @@ convert_type_basic (compile_c_instance *context, struct type *type)
 	   the cast-to type as the variable's type, like GDB's
 	   built-in parser does.  For now, assume "int" like GDB's
 	   built-in parser used to do, but at least warn.  */
-	struct type *fallback;
-	if (type->is_objfile_owned ())
-	  fallback = objfile_type (type->objfile_owner ())->builtin_int;
-	else
-	  fallback = builtin_type (type->arch_owner ())->builtin_int;
+	struct type *fallback = builtin_type (type->arch ())->builtin_int;
 	warning (_("variable has unknown type; assuming int"));
 	return convert_int (context, fallback);
       }

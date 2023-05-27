@@ -182,7 +182,7 @@ extern void add_to_result (expressionS *, offsetT, int);
 extern void subtract_from_result (expressionS *, offsetT, int);
 extern segT expr (int, expressionS *, enum expr_mode);
 extern unsigned int get_single_number (void);
-extern symbolS *make_expr_symbol (expressionS * expressionP);
+extern symbolS *make_expr_symbol (const expressionS * expressionP);
 extern int expr_symbol_where (symbolS *, const char **, unsigned int *);
 extern void current_location (expressionS *);
 extern symbolS *expr_build_uconstant (offsetT);
@@ -190,5 +190,6 @@ extern symbolS *expr_build_dot (void);
 extern uint32_t generic_bignum_to_int32 (void);
 extern uint64_t generic_bignum_to_int64 (void);
 extern int resolve_expression (expressionS *);
+extern void resolve_register (expressionS *);
 
 extern bool literal_prefix_dollar_hex;

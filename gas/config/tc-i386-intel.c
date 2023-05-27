@@ -169,6 +169,10 @@ operatorT i386_operator (const char *name, unsigned int operands, char *pc)
       return O_illegal;
     }
 
+  /* See the quotation related comment in i386_parse_name().  */
+  if (*pc == '"')
+    return O_absent;
+
   for (j = 0; i386_operators[j].name; ++j)
     if (strcasecmp (i386_operators[j].name, name) == 0)
       {
@@ -184,15 +188,12 @@ operatorT i386_operator (const char *name, unsigned int operands, char *pc)
 
   if (i386_types[j].name && *pc == ' ')
     {
+      const char *start = ++input_line_pointer;
       char *pname;
-      char c;
+      char c = get_symbol_name (&pname);
 
-      ++input_line_pointer;
-      c = get_symbol_name (&pname);
-
-      if (strcasecmp (pname, "ptr") == 0)
+      if (strcasecmp (pname, "ptr") == 0 && (c != '"' || pname == start))
 	{
-	  /* FIXME: What if c == '"' ?  */
 	  pname[-1] = *pc;
 	  *pc = c;
 	  if (intel_syntax > 0 || operands != 1)
@@ -200,9 +201,8 @@ operatorT i386_operator (const char *name, unsigned int operands, char *pc)
 	  return i386_types[j].op;
 	}
 
-      if (strcasecmp (pname, "bcst") == 0)
+      if (strcasecmp (pname, "bcst") == 0 && (c != '"' || pname == start))
 	{
-	  /* FIXME: Again, what if c == '"' ?  */
 	  pname[-1] = *pc;
 	  *pc = c;
 	  if (intel_syntax > 0 || operands != 1
@@ -320,8 +320,10 @@ i386_intel_simplify_register (expressionS *e)
 	  as_bad (_("invalid use of register"));
 	  return 0;
 	}
-      if (i386_regtab[reg_num].reg_type.bitfield.class == SReg
-	  && i386_regtab[reg_num].reg_num == RegFlat)
+      if ((i386_regtab[reg_num].reg_type.bitfield.class == SReg
+	   && i386_regtab[reg_num].reg_num == RegFlat)
+	  || (dot_insn ()
+	      && i386_regtab[reg_num].reg_type.bitfield.class == ClassNone))
 	{
 	  as_bad (_("invalid use of pseudo-register"));
 	  return 0;
@@ -342,6 +344,7 @@ i386_intel_simplify_register (expressionS *e)
 
       if (intel_state.in_scale
 	  || i386_regtab[reg_num].reg_type.bitfield.baseindex
+	  || dot_insn ()
 	  || t->mnem_off == MN_bndmk
 	  || t->mnem_off == MN_bndldx
 	  || t->mnem_off == MN_bndstx)
@@ -630,6 +633,7 @@ i386_intel_operand (char *operand_string, int got_a_float)
   input_line_pointer = buf = xstrdup (operand_string);
 
   intel_syntax = -1;
+  expr_mode = expr_operator_none;
   memset (&exp, 0, sizeof(exp));
   exp_seg = expression (&exp);
   ret = i386_intel_simplify (&exp);
@@ -694,7 +698,8 @@ i386_intel_operand (char *operand_string, int got_a_float)
 	  if (got_a_float == 2)	/* "fi..." */
 	    suffix = SHORT_MNEM_SUFFIX;
 	  else if (current_templates->start->mnem_off != MN_lar
-		   && current_templates->start->mnem_off != MN_lsl)
+		   && current_templates->start->mnem_off != MN_lsl
+		   && current_templates->start->mnem_off != MN_arpl)
 	    suffix = WORD_MNEM_SUFFIX;
 	  break;
 
@@ -961,7 +966,8 @@ i386_intel_operand (char *operand_string, int got_a_float)
       i386_operand_type temp;
 
       /* Register operand.  */
-      if (intel_state.base || intel_state.index || intel_state.seg)
+      if (intel_state.base || intel_state.index || intel_state.seg
+          || i.imm_bits[this_operand])
 	{
 	  as_bad (_("invalid operand"));
 	  return 0;
@@ -994,6 +1000,12 @@ i386_intel_operand (char *operand_string, int got_a_float)
 	   || intel_state.is_mem)
     {
       /* Memory operand.  */
+      if (i.imm_bits[this_operand])
+	{
+	  as_bad (_("invalid operand"));
+	  return 0;
+	}
+
       if (i.mem_operands)
 	{
 	  /* Handle

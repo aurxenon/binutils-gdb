@@ -1,4 +1,4 @@
-# Copyright 2022 Free Software Foundation, Inc.
+# Copyright 2022-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,9 +25,11 @@ from . import bt
 from . import disassemble
 from . import evaluate
 from . import launch
+from . import memory
 from . import next
 from . import pause
 from . import scopes
+from . import sources
 from . import threads
 
 from .server import Server

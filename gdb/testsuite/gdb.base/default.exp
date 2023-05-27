@@ -386,8 +386,8 @@ gdb_test "overlay list"   "No sections are mapped."
 gdb_test "overlay map"    "Overlay debugging not enabled.*" "overlay map #1"
 gdb_test "overlay unmap"  "Overlay debugging not enabled.*" "overlay unmap #1"
 gdb_test_no_output "overlay manual" "overlay manual #2"
-gdb_test "overlay map"    "Argument required: name of an overlay section." "overlay map #2"
-gdb_test "overlay unmap"  "Argument required: name of an overlay section." "overlay unmap #2"
+gdb_test "overlay map"    "Argument required: name of an overlay section" "overlay map #2"
+gdb_test "overlay unmap"  "Argument required: name of an overlay section" "overlay unmap #2"
 
 #test print "p" abbreviation
 gdb_test "p" "The history is empty." "print \"p\" abbreviation"
@@ -606,6 +606,7 @@ set show_conv_list \
 	{$_cimag = <internal function _cimag>} \
 	{$_creal = <internal function _creal>} \
 	{$_isvoid = <internal function _isvoid>} \
+	{$_shell = <internal function _shell>} \
 	{$_gdb_maint_setting_str = <internal function _gdb_maint_setting_str>} \
 	{$_gdb_maint_setting = <internal function _gdb_maint_setting>} \
 	{$_gdb_setting_str = <internal function _gdb_setting_str>} \

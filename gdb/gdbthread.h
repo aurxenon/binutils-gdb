@@ -661,19 +661,16 @@ extern int show_inferior_qualified_tids (void);
    circular static buffer, NUMCELLS deep.  */
 const char *print_thread_id (struct thread_info *thr);
 
+/* Like print_thread_id, but always prints the inferior-qualified form,
+   even when there is only a single inferior.  */
+const char *print_full_thread_id (struct thread_info *thr);
+
 /* Boolean test for an already-known ptid.  */
 extern bool in_thread_list (process_stratum_target *targ, ptid_t ptid);
 
 /* Boolean test for an already-known global thread id (GDB's homegrown
    global id, not the system's).  */
 extern int valid_global_thread_id (int global_id);
-
-/* Find (non-exited) thread PTID of inferior INF.  */
-extern thread_info *find_thread_ptid (inferior *inf, ptid_t ptid);
-
-/* Search function to lookup a (non-exited) thread by 'ptid'.  */
-extern struct thread_info *find_thread_ptid (process_stratum_target *targ,
-					     ptid_t ptid);
 
 /* Find thread by GDB global thread ID.  */
 struct thread_info *find_thread_global_id (int global_id);
@@ -853,6 +850,8 @@ class scoped_restore_current_thread
 public:
   scoped_restore_current_thread ();
   ~scoped_restore_current_thread ();
+
+  scoped_restore_current_thread (scoped_restore_current_thread &&rhs);
 
   DISABLE_COPY_AND_ASSIGN (scoped_restore_current_thread);
 

@@ -25,6 +25,7 @@
 #include "event-top.h"
 #include "command.h"
 #include "top.h"
+#include "ui.h"
 #include "tui/tui.h"
 #include "tui/tui-data.h"
 #include "tui/tui-io.h"
@@ -1270,6 +1271,14 @@ tui_getc (FILE *fp)
   try
     {
       return tui_getc_1 (fp);
+    }
+  catch (const gdb_exception_forced_quit &ex)
+    {
+      /* As noted below, it's not safe to let an exception escape
+	 to newline, so, for this case, reset the quit flag for
+	 later QUIT checking.  */
+      set_force_quit_flag ();
+      return 0;
     }
   catch (const gdb_exception &ex)
     {

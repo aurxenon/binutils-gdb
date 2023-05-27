@@ -27,7 +27,7 @@
 #include "inferior.h"
 #include "infrun.h"
 #include "ui-out.h"
-#include "top.h"
+#include "ui.h"
 #include "mi-main.h"
 #include "mi-cmds.h"
 #include "mi-out.h"
@@ -61,7 +61,6 @@ static void mi_insert_notify_hooks (void);
 static void mi_remove_notify_hooks (void);
 
 static void mi_on_signal_received (enum gdb_signal siggnal);
-static void mi_on_end_stepping_range (void);
 static void mi_on_signal_exited (enum gdb_signal siggnal);
 static void mi_on_exited (int exitstatus);
 static void mi_on_normal_stop (struct bpstat *bs, int print_frame);
@@ -206,7 +205,8 @@ mi_interp::exec (const char *command)
 }
 
 void
-mi_cmd_interpreter_exec (const char *command, char **argv, int argc)
+mi_cmd_interpreter_exec (const char *command, const char *const *argv,
+			 int argc)
 {
   struct interp *interp_to_use;
   int i;
@@ -542,23 +542,6 @@ mi_on_signal_received (enum gdb_signal siggnal)
     }
 }
 
-/* Observer for the end_stepping_range notification.  */
-
-static void
-mi_on_end_stepping_range (void)
-{
-  SWITCH_THRU_ALL_UIS ()
-    {
-      struct mi_interp *mi = find_mi_interp ();
-
-      if (mi == NULL)
-	continue;
-
-      print_end_stepping_range_reason (mi->mi_uiout);
-      print_end_stepping_range_reason (mi->cli_uiout);
-    }
-}
-
 /* Observer for the signal_exited notification.  */
 
 static void
@@ -841,7 +824,7 @@ mi_print_breakpoint_for_event (struct mi_interp *mi, breakpoint *bp)
 
       print_breakpoint (bp);
     }
-  catch (const gdb_exception &ex)
+  catch (const gdb_exception_error &ex)
     {
       exception_print (gdb_stderr, ex);
     }
@@ -1015,7 +998,7 @@ mi_on_resume (ptid_t ptid)
   if (ptid == minus_one_ptid || ptid.is_pid ())
     tp = inferior_thread ();
   else
-    tp = find_thread_ptid (target, ptid);
+    tp = target->find_thread (ptid);
 
   /* Suppress output while calling an inferior function.  */
   if (tp->control.in_infcall)
@@ -1317,8 +1300,6 @@ _initialize_mi_interp ()
   interp_factory_register (INTERP_MI, mi_interp_factory);
 
   gdb::observers::signal_received.attach (mi_on_signal_received, "mi-interp");
-  gdb::observers::end_stepping_range.attach (mi_on_end_stepping_range,
-					     "mi-interp");
   gdb::observers::signal_exited.attach (mi_on_signal_exited, "mi-interp");
   gdb::observers::exited.attach (mi_on_exited, "mi-interp");
   gdb::observers::no_history.attach (mi_on_no_history, "mi-interp");

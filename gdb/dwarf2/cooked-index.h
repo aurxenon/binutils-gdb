@@ -36,6 +36,7 @@
 #include "gdbsupport/range-chain.h"
 
 struct dwarf2_per_cu_data;
+struct dwarf2_per_bfd;
 
 /* Flags that describe an entry in the index.  */
 enum cooked_index_flag_enum : unsigned char
@@ -57,6 +58,13 @@ DEF_ENUM_FLAGS_TYPE (enum cooked_index_flag_enum, cooked_index_flag);
 /* Return a string representation of FLAGS.  */
 
 std::string to_string (cooked_index_flag flags);
+
+/* Return true if LANG requires canonicalization.  This is used
+   primarily to work around an issue computing the name of "main".
+   This function must be kept in sync with
+   cooked_index_shard::do_finalize.  */
+
+extern bool language_requires_canonicalization (enum language lang);
 
 /* A cooked_index_entry represents a single item in the index.  Note
    that two entries can be created for the same DIE -- one using the
@@ -144,8 +152,11 @@ struct cooked_index_entry : public allocate_on_obstack
 
   /* Construct the fully-qualified name of this entry and return a
      pointer to it.  If allocation is needed, it will be done on
-     STORAGE.  */
-  const char *full_name (struct obstack *storage) const;
+     STORAGE.  FOR_MAIN is true if we are computing the name of the
+     "main" entry -- one marked DW_AT_main_subprogram.  This matters
+     for avoiding name canonicalization and also a related race (if
+     "main" computation is done during finalization).  */
+  const char *full_name (struct obstack *storage, bool for_main = false) const;
 
   /* Comparison modes for the 'compare' function.  See the function
      for a description.  */
@@ -220,7 +231,11 @@ struct cooked_index_entry : public allocate_on_obstack
 
 private:
 
-  void write_scope (struct obstack *storage, const char *sep) const;
+  /* A helper method for full_name.  Emits the full scope of this
+     object, followed by the separator, to STORAGE.  If this entry has
+     a parent, its write_scope method is called first.  */
+  void write_scope (struct obstack *storage, const char *sep,
+		    bool for_name) const;
 };
 
 class cooked_index;
@@ -325,8 +340,7 @@ private:
   auto_obstack m_storage;
   /* List of all entries.  */
   std::vector<cooked_index_entry *> m_entries;
-  /* If we found "main" or an entry with 'is_main' set, store it
-     here.  */
+  /* If we found an entry with 'is_main' set, store it here.  */
   cooked_index_entry *m_main = nullptr;
   /* The addrmap.  This maps address ranges to dwarf2_per_cu_data
      objects.  */
@@ -353,6 +367,7 @@ public:
   using vec_type = std::vector<std::unique_ptr<cooked_index_shard>>;
 
   explicit cooked_index (vec_type &&vec);
+  ~cooked_index () override;
   DISABLE_COPY_AND_ASSIGN (cooked_index);
 
   /* Wait until the finalization of the entire cooked_index is
@@ -361,19 +376,6 @@ public:
   {
     for (auto &item : m_vector)
       item->wait ();
-  }
-
-  ~cooked_index ()
-  {
-    /* The 'finalize' methods may be run in a different thread.  If
-       this object is destroyed before these complete, then one will
-       end up writing to freed memory.  Waiting for finalization to
-       complete avoids this problem; and the cost seems ignorable
-       because creating and immediately destroying the debug info is a
-       relatively rare thing to do.  Do not allow quitting from this
-       wait.  */
-    for (auto &item : m_vector)
-      item->wait (false);
   }
 
   /* A range over a vector of subranges.  */
@@ -417,11 +419,30 @@ public:
   /* Dump a human-readable form of the contents of the index.  */
   void dump (gdbarch *arch) const;
 
+  /* Wait for the index to be completely finished.  For ordinary uses,
+     the index code ensures this itself -- e.g., 'all_entries' will
+     wait on the 'finalize' future.  However, on destruction, if an
+     index is being written, it's also necessary to wait for that to
+     complete.  */
+  void wait_completely () override
+  {
+    m_write_future.wait ();
+  }
+
+  /* Start writing to the index cache, if the user asked for this.  */
+  void start_writing_index (dwarf2_per_bfd *per_bfd);
+
 private:
+
+  /* Maybe write the index to the index cache.  */
+  void maybe_write_index (dwarf2_per_bfd *per_bfd);
 
   /* The vector of cooked_index objects.  This is stored because the
      entries are stored on the obstacks in those objects.  */
   vec_type m_vector;
+
+  /* A future that tracks when the 'index_write' method is done.  */
+  gdb::future<void> m_write_future;
 };
 
 #endif /* GDB_DWARF2_COOKED_INDEX_H */

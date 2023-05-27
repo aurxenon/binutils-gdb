@@ -430,7 +430,7 @@ iterate_over_live_ada_tasks (ada_task_list_iterator_ftype iterator)
 static void
 value_as_string (char *dest, struct value *val, int length)
 {
-  memcpy (dest, value_contents (val).data (), length);
+  memcpy (dest, val->contents ().data (), length);
   dest[length] = '\0';
 }
 
@@ -457,7 +457,7 @@ read_fat_string_value (char *dest, struct value *val, int max_len)
      to extract the string from the fat string.  */
   if (initialize_fieldnos)
     {
-      struct type *type = value_type (val);
+      struct type *type = val->type ();
       struct type *bounds_type;
 
       array_fieldno = ada_get_field_index (type, "P_ARRAY", 0);
@@ -484,7 +484,7 @@ read_fat_string_value (char *dest, struct value *val, int max_len)
 
   /* Extract LEN characters from the fat string.  */
   array_val = value_ind (value_field (val, array_fieldno));
-  read_memory (value_address (array_val), (gdb_byte *) dest, len);
+  read_memory (array_val->address (), (gdb_byte *) dest, len);
 
   /* Add the NUL character to close the string.  */
   dest[len] = '\0';
@@ -784,7 +784,7 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
 	value_subscript (entry_calls_value,
 			 value_as_long (atc_nesting_level_value));
       called_task_fieldno =
-	ada_get_field_index (value_type (entry_calls_value_element),
+	ada_get_field_index (entry_calls_value_element->type (),
 			     "called_task", 0);
       task_info->called_task =
 	value_as_address (value_field (entry_calls_value_element,
@@ -943,8 +943,8 @@ ada_tasks_inferior_data_sniffer (struct ada_tasks_inferior_data *data)
 	      && eltype->code () == TYPE_CODE_PTR)
 	    idxtype = check_typedef (type->index_type ());
 	  if (idxtype != NULL
-	      && idxtype->bounds ()->low.kind () != PROP_UNDEFINED
-	      && idxtype->bounds ()->high.kind () != PROP_UNDEFINED)
+	      && idxtype->bounds ()->low.is_constant ()
+	      && idxtype->bounds ()->high.is_constant ())
 	    {
 	      data->known_tasks_element = eltype;
 	      data->known_tasks_length =
@@ -1177,7 +1177,7 @@ print_ada_task_info (struct ui_out *uiout,
       if (uiout->is_mi_like_p ())
 	{
 	  thread_info *thread = (ada_task_is_alive (task_info)
-				 ? find_thread_ptid (inf, task_info->ptid)
+				 ? inf->find_thread (task_info->ptid)
 				 : nullptr);
 
 	  if (thread != NULL)
@@ -1393,7 +1393,7 @@ task_command_1 (const char *taskno_str, int from_tty, struct inferior *inf)
      computed if target_get_ada_task_ptid has not been implemented for
      our target (yet).  Rather than cause an assertion error in that case,
      it's nicer for the user to just refuse to perform the task switch.  */
-  thread_info *tp = find_thread_ptid (inf, task_info->ptid);
+  thread_info *tp = inf->find_thread (task_info->ptid);
   if (tp == NULL)
     error (_("Unable to compute thread ID for task %s.\n"
 	     "Cannot switch to this task."),
@@ -1577,7 +1577,7 @@ task_apply_all_command (const char *cmd, int from_tty)
       if (!ada_task_is_alive (&task))
 	continue;
 
-      thread_info *tp = find_thread_ptid (inf, task.ptid);
+      thread_info *tp = inf->find_thread (task.ptid);
       if (tp == nullptr)
 	warning (_("Unable to compute thread ID for task %s.\n"
 		   "Cannot switch to this task."),
@@ -1627,7 +1627,7 @@ task_apply_command (const char *tidlist, int from_tty)
 	  if (!ada_task_is_alive (&task))
 	    continue;
 
-	  thread_info *tp = find_thread_ptid (inf, task.ptid);
+	  thread_info *tp = inf->find_thread (task.ptid);
 	  if (tp == nullptr)
 	    warning (_("Unable to compute thread ID for task %s.\n"
 		       "Cannot switch to this task."),

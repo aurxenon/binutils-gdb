@@ -206,10 +206,10 @@ mi_should_print (struct symbol *sym, enum mi_print_types type)
 static void
 py_print_type (struct ui_out *out, struct value *val)
 {
-  check_typedef (value_type (val));
+  check_typedef (val->type ());
 
   string_file stb;
-  type_print (value_type (val), "", &stb, -1);
+  type_print (val->type (), "", &stb, -1);
   out->field_stream ("type", stb);
 }
 
@@ -235,14 +235,10 @@ py_print_value (struct ui_out *out, struct value *val,
   if (args_type == MI_PRINT_SIMPLE_VALUES
       || args_type == MI_PRINT_ALL_VALUES)
     {
-      struct type *type = check_typedef (value_type (val));
-
       if (args_type == MI_PRINT_ALL_VALUES)
 	should_print = 1;
       else if (args_type == MI_PRINT_SIMPLE_VALUES
-	       && type->code () != TYPE_CODE_ARRAY
-	       && type->code () != TYPE_CODE_STRUCT
-	       && type->code () != TYPE_CODE_UNION)
+	       && mi_simple_type_p (val->type ()))
 	should_print = 1;
     }
   else if (args_type != NO_VALUES)
@@ -378,7 +374,7 @@ py_print_single_arg (struct ui_out *out,
     py_print_type (out, val);
 
   if (val != NULL)
-    annotate_arg_value (value_type (val));
+    annotate_arg_value (val->type ());
 
   /* If the output is to the CLI, and the user option "set print
      frame-arguments" is set to none, just output "...".  */

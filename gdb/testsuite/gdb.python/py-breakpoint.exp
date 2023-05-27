@@ -36,6 +36,8 @@ if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} ${options}]
     return -1
 }
 
+set past_throw_catch_line [gdb_get_line_number "Past throw-catch."]
+
 proc_with_prefix test_bkpt_basic { } {
     global srcfile testfile hex decimal
 
@@ -55,7 +57,7 @@ proc_with_prefix test_bkpt_basic { } {
     gdb_test "python print (blist\[0\])" \
 	"<gdb.Breakpoint object at $hex>" "Check obj exists @main"
     gdb_test "python print (blist\[0\].location)" \
-	"main." "Check breakpoint location @main"
+	"main" "Check breakpoint location @main"
     gdb_test "python print (blist\[0\].pending)" "False" \
 	"Check pending status of main breakpoint"
 
@@ -73,7 +75,7 @@ proc_with_prefix test_bkpt_basic { } {
     gdb_test "python print (blist\[0\])" \
 	"<gdb.Breakpoint object at $hex>" "Check obj exists @main 2"
     gdb_test "python print (blist\[0\].location)" \
-	"main." "Check breakpoint location @main 2"
+	"main" "Check breakpoint location @main 2"
     gdb_test "python print (blist\[1\])" \
 	"<gdb.Breakpoint object at $hex>" "Check obj exists @mult_line"
 
@@ -204,7 +206,7 @@ proc_with_prefix test_bkpt_cond_and_cmds { } {
     gdb_py_test_silent_cmd "python last_bp = blist\[len(blist)-1\]" \
 	"Find last breakpoint" 0
     gdb_test "python print (last_bp.commands)" \
-	"print \"Command for breakpoint has been executed.\".*print result"
+	"print \"Command for breakpoint has been executed.\".*print result\r\n"
 
     gdb_test_no_output "python last_bp.commands = 'echo hi\\necho there'" \
 	"set commands"
@@ -293,7 +295,7 @@ proc_with_prefix test_watchpoints { } {
 	gdb_test_no_output "set can-use-hw-watchpoints 0" ""
     }
 
-    if {![runto_main]} {
+    if {![runto $srcfile:$::past_throw_catch_line]} {
 	return 0
     }
 
@@ -316,7 +318,7 @@ proc_with_prefix test_bkpt_internal { } {
     if {!$allow_hw_watchpoint_tests_p} {
 	gdb_test_no_output "set can-use-hw-watchpoints 0" ""
     }
-    if {![runto_main]} {
+    if {![runto $srcfile:$::past_throw_catch_line]} {
 	return 0
     }
     delete_breakpoints

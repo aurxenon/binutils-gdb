@@ -36,7 +36,7 @@ extern bool print_debugging_info
 
 extern void *start_stab (void *, bfd *, bool, asymbol **, long);
 
-extern bool finish_stab (void *, void *);
+extern bool finish_stab (void *, void *, bool);
 
 extern bool parse_stab
   (void *, void *, int, int, bfd_vma, const char *);

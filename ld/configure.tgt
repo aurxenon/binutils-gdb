@@ -118,6 +118,9 @@ aarch64-*-linux*)	targ_emul=aarch64linux
 aarch64-*-haiku*)	targ_emul=aarch64haiku
 			targ_extra_emuls="aarch64elf aarch64elf32 aarch64elf32b aarch64elfb armelf armelfb armelf_haiku $targ_extra_libpath"
 			;;
+aarch64-*-nto*)		targ_emul=aarch64nto
+			targ_extra_emuls="aarch64elf aarch64elf32 aarch64elf32b aarch64elfb armelf armelfb"
+			;;
 aarch64-*-pe* | aarch64-*-mingw*)
 			targ_emul=aarch64pe
 			targ_extra_emuls="arm64pe"
@@ -579,11 +582,19 @@ mips*-*-vxworks*)	targ_emul=elf32ebmipvxworks
 			;;
 mips*-*-windiss)	targ_emul=elf32mipswindiss
 			;;
-mips64*el-*-linux-*)	targ_emul=elf32ltsmipn32
+mips*64*el-*-linux-gnuabi64)	targ_emul=elf64ltsmip
+			targ_extra_emuls="elf32btsmipn32 elf32ltsmipn32 elf32ltsmip elf32btsmip elf64btsmip"
+			targ_extra_libpath=$targ_extra_emuls
+			;;
+mips*64*el-*-linux-*)	targ_emul=elf32ltsmipn32
 			targ_extra_emuls="elf32btsmipn32 elf32ltsmip elf32btsmip elf64ltsmip elf64btsmip"
 			targ_extra_libpath=$targ_extra_emuls
 			;;
-mips64*-*-linux-*)	targ_emul=elf32btsmipn32
+mips*64*-*-linux-gnuabi64)	targ_emul=elf64btsmip
+			targ_extra_emuls="elf32btsmipn32 elf32ltsmipn32 elf32btsmip elf32ltsmip elf64ltsmip"
+			targ_extra_libpath=$targ_extra_emuls
+			;;
+mips*64*-*-linux-*)	targ_emul=elf32btsmipn32
 			targ_extra_emuls="elf32ltsmipn32 elf32btsmip elf32ltsmip elf64btsmip elf64ltsmip"
 			targ_extra_libpath=$targ_extra_emuls
 			;;

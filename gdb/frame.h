@@ -203,6 +203,10 @@ enum frame_type
   SENTINEL_FRAME
 };
 
+/* Return a string representation of TYPE.  */
+
+extern const char *frame_type_str (frame_type type);
+
 /* A wrapper for "frame_info *".  frame_info objects are invalidated
    whenever reinit_frame_cache is called.  This class arranges to
    invalidate the pointer when appropriate.  This is done to help
@@ -250,11 +254,9 @@ public:
 
   ~frame_info_ptr ()
   {
-    /* If this node has static storage, it may be deleted after
-       frame_list.  Attempting to erase ourselves would then trigger
-       internal errors, so make sure we are still linked first.  */
-    if (is_linked ())
-      frame_list.erase (frame_list.iterator_to (*this));
+    /* If this node has static storage, it should be be deleted before
+       frame_list.  */
+    frame_list.erase (frame_list.iterator_to (*this));
   }
 
   frame_info_ptr &operator= (const frame_info_ptr &other)

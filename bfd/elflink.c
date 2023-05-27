@@ -4386,7 +4386,7 @@ elf_link_add_object_symbols (bfd *abfd, struct bfd_link_info *info)
 		       | DYN_NO_NEEDED)) == 0;
 
       s = bfd_get_section_by_name (abfd, ".dynamic");
-      if (s != NULL && s->size != 0)
+      if (s != NULL && s->size != 0 && (s->flags & SEC_HAS_CONTENTS) != 0)
 	{
 	  bfd_byte *dynbuf;
 	  bfd_byte *extdyn;
@@ -5382,7 +5382,14 @@ elf_link_add_object_symbols (bfd *abfd, struct bfd_link_info *info)
 	      h->unique_global = (flags & BSF_GNU_UNIQUE) != 0;
 	    }
 
-	  if (definition && !dynamic)
+	  /* Don't add indirect symbols for .symver x, x@FOO aliases
+	     in IR.  Since all data or text symbols in IR have the
+	     same type, value and section, we can't tell if a symbol
+	     is an alias of another symbol by their types, values and
+	     sections.  */
+	  if (definition
+	      && !dynamic
+	      && (abfd->flags & BFD_PLUGIN) == 0)
 	    {
 	      char *p = strchr (name, ELF_VER_CHR);
 	      if (p != NULL && p[1] != ELF_VER_CHR)
@@ -8204,7 +8211,7 @@ bfd_elf_get_bfd_needed_list (bfd *abfd,
     return true;
 
   s = bfd_get_section_by_name (abfd, ".dynamic");
-  if (s == NULL || s->size == 0)
+  if (s == NULL || s->size == 0 || (s->flags & SEC_HAS_CONTENTS) == 0)
     return true;
 
   if (!bfd_malloc_and_get_section (abfd, s, &dynbuf))

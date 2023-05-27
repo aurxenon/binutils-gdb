@@ -400,7 +400,7 @@ solib_aix_get_section_offsets (struct objfile *objfile,
   if (objfile->sect_index_text != -1)
     {
       struct bfd_section *sect
-	= objfile->sections[objfile->sect_index_text].the_bfd_section;
+	= objfile->sections_start[objfile->sect_index_text].the_bfd_section;
 
       offsets[objfile->sect_index_text]
 	= info->text_addr + sect->filepos - bfd_section_vma (sect);
@@ -411,7 +411,7 @@ solib_aix_get_section_offsets (struct objfile *objfile,
   if (objfile->sect_index_data != -1)
     {
       struct bfd_section *sect
-	= objfile->sections[objfile->sect_index_data].the_bfd_section;
+	= objfile->sections_start[objfile->sect_index_data].the_bfd_section;
 
       offsets[objfile->sect_index_data]
 	= info->data_addr - bfd_section_vma (sect);
@@ -610,6 +610,20 @@ solib_aix_bfd_open (const char *pathname)
       if (member_name == bfd_get_filename (object_bfd.get ()))
 	break;
 
+      std::string s = bfd_get_filename (object_bfd.get ());
+
+      /* For every inferior after first int bfd system we
+	 will have the pathname instead of the member name
+	 registered. Hence the below condition exists.  */
+
+      if (s.find ('(') != std::string::npos)
+	{
+	  int pos = s.find ('(');
+	  int len = s.find (')') - s.find ('(');
+	  if (s.substr (pos+1, len-1) == member_name)
+	    return object_bfd;
+	}
+
       object_bfd = gdb_bfd_openr_next_archived_file (archive_bfd.get (),
 						     object_bfd.get ());
     }
@@ -648,9 +662,7 @@ solib_aix_bfd_open (const char *pathname)
 static struct obj_section *
 data_obj_section_from_objfile (struct objfile *objfile)
 {
-  struct obj_section *osect;
-
-  ALL_OBJFILE_OSECTIONS (objfile, osect)
+  for (obj_section *osect : objfile->sections ())
     if (strcmp (bfd_section_name (osect->the_bfd_section), ".data") == 0)
       return osect;
 

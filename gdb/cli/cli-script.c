@@ -23,6 +23,7 @@
 
 #include "ui-out.h"
 #include "top.h"
+#include "ui.h"
 #include "breakpoint.h"
 #include "tracepoint.h"
 #include "cli/cli-cmds.h"
@@ -52,7 +53,7 @@ static void do_define_command (const char *comname, int from_tty,
 			       const counted_command_line *commands);
 
 static void do_document_command (const char *comname, int from_tty,
-                                 const counted_command_line *commands);
+				 const counted_command_line *commands);
 
 static const char *read_next_line (std::string &buffer);
 
@@ -567,7 +568,7 @@ execute_control_command_1 (struct command_line *cmd, int from_tty)
 	    /* Evaluate the expression.  */
 	    {
 	      scoped_value_mark mark;
-	      value *val = evaluate_expression (expr.get ());
+	      value *val = expr->evaluate ();
 	      cond_result = value_true (val);
 	    }
 
@@ -622,7 +623,7 @@ execute_control_command_1 (struct command_line *cmd, int from_tty)
 	/* Evaluate the conditional.  */
 	{
 	  scoped_value_mark mark;
-	  value *val = evaluate_expression (expr.get ());
+	  value *val = expr->evaluate ();
 
 	  /* Choose which arm to take commands from based on the value
 	     of the conditional expression.  */
@@ -1509,7 +1510,7 @@ define_command (const char *comname, int from_tty)
    command and the commands are provided.  */
 static void
 do_document_command (const char *comname, int from_tty,
-                     const counted_command_line *commands)
+		     const counted_command_line *commands)
 {
   struct cmd_list_element *alias, *prefix_cmd, *c;
   const char *comfull;
@@ -1540,7 +1541,7 @@ do_document_command (const char *comname, int from_tty,
   if (commands == nullptr)
     {
       std::string prompt
-        = string_printf ("Type documentation for \"%s\".", comfull);
+	= string_printf ("Type documentation for \"%s\".", comfull);
       doclines = read_command_lines (prompt.c_str (), from_tty, 0, 0);
     }
   else
@@ -1696,7 +1697,7 @@ _initialize_cli_script ()
      as this helps the user to either type the command name and/or
      its prefixes.  */
   document_cmd_element = add_com ("document", class_support, document_command,
-                                  _("\
+				  _("\
 Document a user-defined command or user-defined alias.\n\
 Give command or alias name as argument.  Give documentation on following lines.\n\
 End with a line of just \"end\"."));

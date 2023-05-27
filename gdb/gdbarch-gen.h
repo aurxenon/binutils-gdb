@@ -1,4 +1,4 @@
-/* *INDENT-OFF* */ /* THIS FILE IS GENERATED -*- buffer-read-only: t -*- */
+/* THIS FILE IS GENERATED -*- buffer-read-only: t -*- */
 /* vi:set ro: */
 
 /* Dynamic architecture support for GDB, the GNU debugger.
@@ -467,6 +467,27 @@ extern void set_gdbarch_return_value_as_value (struct gdbarch *gdbarch, gdbarch_
 typedef CORE_ADDR (gdbarch_get_return_buf_addr_ftype) (struct type *val_type, frame_info_ptr cur_frame);
 extern CORE_ADDR gdbarch_get_return_buf_addr (struct gdbarch *gdbarch, struct type *val_type, frame_info_ptr cur_frame);
 extern void set_gdbarch_get_return_buf_addr (struct gdbarch *gdbarch, gdbarch_get_return_buf_addr_ftype *get_return_buf_addr);
+
+/* Return true if the typedef record needs to be replaced.".
+
+   Return 0 by default */
+
+typedef bool (gdbarch_dwarf2_omit_typedef_p_ftype) (struct type *target_type, const char *producer, const char *name);
+extern bool gdbarch_dwarf2_omit_typedef_p (struct gdbarch *gdbarch, struct type *target_type, const char *producer, const char *name);
+extern void set_gdbarch_dwarf2_omit_typedef_p (struct gdbarch *gdbarch, gdbarch_dwarf2_omit_typedef_p_ftype *dwarf2_omit_typedef_p);
+
+/* Update PC when trying to find a call site.  This is useful on
+   architectures where the call site PC, as reported in the DWARF, can be
+   incorrect for some reason.
+
+   The passed-in PC will be an address in the inferior.  GDB will have
+   already failed to find a call site at this PC.  This function may
+   simply return its parameter if it thinks that should be the correct
+   address. */
+
+typedef CORE_ADDR (gdbarch_update_call_site_pc_ftype) (struct gdbarch *gdbarch, CORE_ADDR pc);
+extern CORE_ADDR gdbarch_update_call_site_pc (struct gdbarch *gdbarch, CORE_ADDR pc);
+extern void set_gdbarch_update_call_site_pc (struct gdbarch *gdbarch, gdbarch_update_call_site_pc_ftype *update_call_site_pc);
 
 /* Return true if the return value of function is stored in the first hidden
    parameter.  In theory, this feature should be language-dependent, specified
@@ -1039,8 +1060,8 @@ extern void set_gdbarch_max_insn_length (struct gdbarch *gdbarch, ULONGEST max_i
    see the comments in infrun.c.
 
    The TO area is only guaranteed to have space for
-   gdbarch_max_insn_length (arch) bytes, so this function must not
-   write more bytes than that to that area.
+   gdbarch_displaced_step_buffer_length (arch) octets, so this
+   function must not write more octets than that to this area.
 
    If you do not provide this function, GDB assumes that the
    architecture does not support displaced stepping.
@@ -1068,9 +1089,9 @@ typedef bool (gdbarch_displaced_step_hw_singlestep_ftype) (struct gdbarch *gdbar
 extern bool gdbarch_displaced_step_hw_singlestep (struct gdbarch *gdbarch);
 extern void set_gdbarch_displaced_step_hw_singlestep (struct gdbarch *gdbarch, gdbarch_displaced_step_hw_singlestep_ftype *displaced_step_hw_singlestep);
 
-/* Fix up the state resulting from successfully single-stepping a
-   displaced instruction, to give the result we would have gotten from
-   stepping the instruction in its original location.
+/* Fix up the state after attempting to single-step a displaced
+   instruction, to give the result we would have gotten from stepping the
+   instruction in its original location.
 
    REGS is the register state resulting from single-stepping the
    displaced instruction.
@@ -1078,17 +1099,24 @@ extern void set_gdbarch_displaced_step_hw_singlestep (struct gdbarch *gdbarch, g
    CLOSURE is the result from the matching call to
    gdbarch_displaced_step_copy_insn.
 
-   If you provide gdbarch_displaced_step_copy_insn.but not this
-   function, then GDB assumes that no fixup is needed after
-   single-stepping the instruction.
+   FROM is the address where the instruction was original located, TO is
+   the address of the displaced buffer where the instruction was copied
+   to for stepping.
+
+   COMPLETED_P is true if GDB stopped as a result of the requested step
+   having completed (e.g. the inferior stopped with SIGTRAP), otherwise
+   COMPLETED_P is false and GDB stopped for some other reason.  In the
+   case where a single instruction is expanded to multiple replacement
+   instructions for stepping then it may be necessary to read the current
+   program counter from REGS in order to decide how far through the
+   series of replacement instructions the inferior got before stopping,
+   this may impact what will need fixing up in this function.
 
    For a general explanation of displaced stepping and how GDB uses it,
    see the comments in infrun.c. */
 
-extern bool gdbarch_displaced_step_fixup_p (struct gdbarch *gdbarch);
-
-typedef void (gdbarch_displaced_step_fixup_ftype) (struct gdbarch *gdbarch, struct displaced_step_copy_insn_closure *closure, CORE_ADDR from, CORE_ADDR to, struct regcache *regs);
-extern void gdbarch_displaced_step_fixup (struct gdbarch *gdbarch, struct displaced_step_copy_insn_closure *closure, CORE_ADDR from, CORE_ADDR to, struct regcache *regs);
+typedef void (gdbarch_displaced_step_fixup_ftype) (struct gdbarch *gdbarch, struct displaced_step_copy_insn_closure *closure, CORE_ADDR from, CORE_ADDR to, struct regcache *regs, bool completed_p);
+extern void gdbarch_displaced_step_fixup (struct gdbarch *gdbarch, struct displaced_step_copy_insn_closure *closure, CORE_ADDR from, CORE_ADDR to, struct regcache *regs, bool completed_p);
 extern void set_gdbarch_displaced_step_fixup (struct gdbarch *gdbarch, gdbarch_displaced_step_fixup_ftype *displaced_step_fixup);
 
 /* Prepare THREAD for it to displaced step the instruction at its current PC.
@@ -1103,8 +1131,8 @@ extern void set_gdbarch_displaced_step_prepare (struct gdbarch *gdbarch, gdbarch
 
 /* Clean up after a displaced step of THREAD. */
 
-typedef displaced_step_finish_status (gdbarch_displaced_step_finish_ftype) (struct gdbarch *gdbarch, thread_info *thread, gdb_signal sig);
-extern displaced_step_finish_status gdbarch_displaced_step_finish (struct gdbarch *gdbarch, thread_info *thread, gdb_signal sig);
+typedef displaced_step_finish_status (gdbarch_displaced_step_finish_ftype) (struct gdbarch *gdbarch, thread_info *thread, const target_waitstatus &ws);
+extern displaced_step_finish_status gdbarch_displaced_step_finish (struct gdbarch *gdbarch, thread_info *thread, const target_waitstatus &ws);
 extern void set_gdbarch_displaced_step_finish (struct gdbarch *gdbarch, gdbarch_displaced_step_finish_ftype *displaced_step_finish);
 
 /* Return the closure associated to the displaced step buffer that is at ADDR. */
@@ -1121,6 +1149,14 @@ extern void set_gdbarch_displaced_step_copy_insn_closure_by_addr (struct gdbarch
 typedef void (gdbarch_displaced_step_restore_all_in_ptid_ftype) (inferior *parent_inf, ptid_t child_ptid);
 extern void gdbarch_displaced_step_restore_all_in_ptid (struct gdbarch *gdbarch, inferior *parent_inf, ptid_t child_ptid);
 extern void set_gdbarch_displaced_step_restore_all_in_ptid (struct gdbarch *gdbarch, gdbarch_displaced_step_restore_all_in_ptid_ftype *displaced_step_restore_all_in_ptid);
+
+/* The maximum length in octets required for a displaced-step instruction
+   buffer.  By default this will be the same as gdbarch::max_insn_length,
+   but should be overridden for architectures that might expand a
+   displaced-step instruction to multiple replacement instructions. */
+
+extern ULONGEST gdbarch_displaced_step_buffer_length (struct gdbarch *gdbarch);
+extern void set_gdbarch_displaced_step_buffer_length (struct gdbarch *gdbarch, ULONGEST displaced_step_buffer_length);
 
 /* Relocate an instruction to execute at a different address.  OLDLOC
    is the address in the inferior memory where the instruction to

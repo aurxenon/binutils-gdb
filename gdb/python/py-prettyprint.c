@@ -574,15 +574,15 @@ gdbpy_apply_val_pretty_printer (const struct extension_language_defn *extlang,
 				const struct value_print_options *options,
 				const struct language_defn *language)
 {
-  struct type *type = value_type (value);
+  struct type *type = value->type ();
   struct gdbarch *gdbarch = type->arch ();
   enum gdbpy_string_repr_result print_result;
 
-  if (value_lazy (value))
-    value_fetch_lazy (value);
+  if (value->lazy ())
+    value->fetch_lazy ();
 
   /* No pretty-printer support for unavailable values.  */
-  if (!value_bytes_available (value, 0, type->length ()))
+  if (!value->bytes_available (0, type->length ()))
     return EXT_LANG_RC_NOP;
 
   if (!gdb_python_initialized)
@@ -590,7 +590,7 @@ gdbpy_apply_val_pretty_printer (const struct extension_language_defn *extlang,
 
   gdbpy_enter enter_py (gdbarch, language);
 
-  gdbpy_ref<> val_obj (value_to_value_object_no_release (value));
+  gdbpy_ref<> val_obj (value_to_value_object (value));
   if (val_obj == NULL)
     {
       print_stack_unless_memory_error (stream);
@@ -663,7 +663,7 @@ gdbpy_get_varobj_pretty_printer (struct value *value)
 {
   try
     {
-      value = value_copy (value);
+      value = value->copy ();
     }
   catch (const gdb_exception &except)
     {

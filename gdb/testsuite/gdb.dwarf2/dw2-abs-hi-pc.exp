@@ -24,7 +24,8 @@ set sources \
 	 ${testfile}.c \
 	 ${testfile}-hello.c \
 	 ${testfile}-world.c]
-set sources [lmap i $sources { string cat "${srcdir}/${subdir}/" $i }]
+set sources [lmap i $sources { set tmp $srcdir/$subdir/$i }]
+
 lassign [function_range hello $sources] \
     hello_start hello_len
 lassign [function_range world $sources] \
@@ -37,13 +38,16 @@ set sources \
 	 ${testfile}-hello.c \
 	 ${testfile}-world-dbg.S \
 	 ${testfile}-world.c]
-set flags \
-    [list \
-	 "nodebug" \
-	 "additional_flags=\"-DHELLO_START=$hello_start\"" \
-	 "additional_flags=\"-DHELLO_END=$hello_start + $hello_len\"" \
-	 "additional_flags=\"-DWORLD_START=$world_start\"" \
-	 "additional_flags=\"-DWORLD_END=$world_start + $world_len\""]
+
+set flags {}
+lappend flags nodebug
+lappend flags additional_flags=[quote_for_host -DHELLO_START=$hello_start]
+lappend flags additional_flags=[quote_for_host -DHELLO_END=$hello_start \
+				    + $hello_len]
+lappend flags additional_flags=[quote_for_host -DWORLD_START=$world_start]
+lappend flags additional_flags=[quote_for_host -DWORLD_END=$world_start \
+				    + $world_len]
+
 set executable ${testfile}
 if {[build_executable ${testfile}.exp ${executable} $sources $flags] == -1} {
     return -1

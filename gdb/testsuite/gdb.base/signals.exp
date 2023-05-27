@@ -13,10 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-if [target_info exists gdb,nosignals] {
-    verbose "Skipping signals.exp because of nosignals."
-    return
-}
+require {!target_info exists gdb,nosignals}
 
 
 standard_testfile .c
@@ -91,7 +88,7 @@ if {[runto_main]} {
 
     # ...call the function
 
-    gdb_test "p func1 ()" "^p func1 \\(\\)\r\n.\[0-9\]* = void" \
+    gdb_test "p func1 ()" "^\\\$$decimal = void" \
 	"p func1 () #1"
 
     # ...veryfiy that the cout was updated

@@ -93,7 +93,7 @@ gdb_test_multiline "input command to throw error" \
     "    (throw-user-error \"you lose! ~a\" arg))))" "" \
     "end" ""
 
-gdb_test "test-error-cmd ugh" "ERROR: you lose! ugh" "call error command"
+gdb_test "test-error-cmd ugh" "ERROR: you lose! ugh\r\n" "call error command"
 
 # Test string->argv.
 
@@ -149,14 +149,17 @@ gdb_test "complete expr-test bar\." \
     "expr-test bar\.bc.*expr-test bar\.ij.*" \
     "test completion through complete command"
 
-set test "complete 'expr-test bar.i'"
-send_gdb "expr-test bar\.i\t\t"
-gdb_test_multiple "" "$test" {
-    -re "expr-test bar\.ij \\\x07$" {
-	send_gdb "\n"
-	gdb_test_multiple "" $test {
-	    -re "invoked on = bar.ij.*$gdb_prompt $" {
-		pass "$test"
+
+if { [readline_is_used] } {
+    set test "complete 'expr-test bar.i'"
+    send_gdb "expr-test bar\.i\t\t"
+    gdb_test_multiple "" "$test" {
+	-re "expr-test bar\.ij \\\x07$" {
+	    send_gdb "\n"
+	    gdb_test_multiple "" $test {
+		-re "invoked on = bar.ij.*$gdb_prompt $" {
+		    pass "$test"
+		}
 	    }
 	}
     }

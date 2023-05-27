@@ -176,10 +176,10 @@ amd64_windows_adjust_args_passed_by_pointer (struct value **args,
   int i;
 
   for (i = 0; i < nargs; i++)
-    if (amd64_windows_passed_by_pointer (value_type (args[i])))
+    if (amd64_windows_passed_by_pointer (args[i]->type ()))
       {
-	struct type *type = value_type (args[i]);
-	const gdb_byte *valbuf = value_contents (args[i]).data ();
+	struct type *type = args[i]->type ();
+	const gdb_byte *valbuf = args[i]->contents ().data ();
 	const int len = type->length ();
 
 	/* Store a copy of that argument on the stack, aligned to
@@ -204,8 +204,8 @@ static void
 amd64_windows_store_arg_in_reg (struct regcache *regcache,
 				struct value *arg, int regno)
 {
-  struct type *type = value_type (arg);
-  const gdb_byte *valbuf = value_contents (arg).data ();
+  struct type *type = arg->type ();
+  const gdb_byte *valbuf = arg->contents ().data ();
   gdb_byte buf[8];
 
   gdb_assert (type->length () <= 8);
@@ -251,7 +251,7 @@ amd64_windows_push_arguments (struct regcache *regcache, int nargs,
 
   for (i = 0; i < nargs; i++)
     {
-      struct type *type = value_type (args[i]);
+      struct type *type = args[i]->type ();
       int len = type->length ();
       int on_stack_p = 1;
 
@@ -294,8 +294,8 @@ amd64_windows_push_arguments (struct regcache *regcache, int nargs,
   /* Write out the arguments to the stack.  */
   for (i = 0; i < num_stack_args; i++)
     {
-      struct type *type = value_type (stack_args[i]);
-      const gdb_byte *valbuf = value_contents (stack_args[i]).data ();
+      struct type *type = stack_args[i]->type ();
+      const gdb_byte *valbuf = stack_args[i]->contents ().data ();
 
       write_memory (sp + element * 8, valbuf, type->length ());
       element += ((type->length () + 7) / 8);
@@ -408,9 +408,9 @@ amd64_windows_return_value (struct gdbarch *gdbarch, struct value *function,
       /* Extract the return value from the register where it was stored.  */
       if (read_value != nullptr)
 	{
-	  *read_value = allocate_value (type);
+	  *read_value = value::allocate (type);
 	  regcache->raw_read_part (regnum, 0, len,
-				   value_contents_raw (*read_value).data ());
+				   (*read_value)->contents_raw ().data ());
 	}
       if (writebuf)
 	regcache->raw_write_part (regnum, 0, len, writebuf);
@@ -1098,13 +1098,14 @@ amd64_windows_frame_cache (frame_info_ptr this_frame, void **this_cache)
   cache->sp = extract_unsigned_integer (buf, 8, byte_order);
   cache->pc = pc;
 
+  /* If we can't find the unwind info, keep trying as though this is a
+     leaf function.  This situation can happen when PC==0, see
+     https://sourceware.org/bugzilla/show_bug.cgi?id=30255.  */
   if (amd64_windows_find_unwind_info (gdbarch, pc, &unwind_info,
 				      &cache->image_base,
 				      &cache->start_rva,
-				      &cache->end_rva))
-    return cache;
-
-  if (unwind_info == 0)
+				      &cache->end_rva)
+      || unwind_info == 0)
     {
       /* Assume a leaf function.  */
       cache->prev_sp = cache->sp + 8;

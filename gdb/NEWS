@@ -3,6 +3,17 @@
 
 *** Changes since GDB 13
 
+* The AArch64 'org.gnu.gdb.aarch64.pauth' Pointer Authentication feature string
+  has been deprecated in favor of the 'org.gnu.gdb.aarch64.pauth_v2' feature
+  string.
+
+* GDB now has some support for integer types larger than 64 bits.
+
+* Removed targets and native configurations
+
+  GDB no longer supports AIX 4.x, AIX 5.x and AIX 6.x.  The minimum supported
+  AIX version is now AIX 7.1.
+
 * Multi-target feature configuration
 
   GDB now supports the individual configuration of remote targets' feature
@@ -44,6 +55,18 @@
   keyword already gave an error when used multiple times with the
   watch command, this remains unchanged.
 
+* The 'set print elements' setting now helps when printing large arrays.
+  If an array would otherwise exceed max-value-size, but 'print elements'
+  is set such that the size of elements to print is less than or equal
+  to 'max-value-size', GDB will now still print the array, however only
+  'max-value-size' worth of data will be added into the value history.
+
+* For both the break and watch commands, it is now invalid to use both
+  the 'thread' and 'task' keywords within the same command.  For
+  example the following commnds will now give an error:
+    break foo thread 1 task 1
+    watch var thread 2 task 3
+
 * New commands
 
 maintenance print record-instruction [ N ]
@@ -52,10 +75,139 @@ maintenance print record-instruction [ N ]
   prints how GDB would undo the N-th previous instruction, and if N is
   positive, it prints how GDB will redo the N-th following instruction.
 
+maintenance info frame-unwinders
+  List the frame unwinders currently in effect, starting with the highest
+  priority.
+
+maintenance wait-for-index-cache
+  Wait until all pending writes to the index cache have completed.
+
+set always-read-ctf on|off
+show always-read-ctf
+  When off, CTF is only read if DWARF is not present.  When on, CTF is
+  read regardless of whether DWARF is present.  Off by default.
+
+info main
+  Get main symbol to identify entry point into program.
+
+* New convenience function "$_shell", to execute a shell command and
+  return the result.  This lets you run shell commands in expressions.
+  Some examples:
+
+   (gdb) p $_shell("true")
+   $1 = 0
+   (gdb) p $_shell("false")
+   $2 = 1
+   (gdb) break func if $_shell("some command") == 0
+
 * MI changes
 
 ** mi now reports 'no-history' as a stop reason when hitting the end of the
    reverse execution history.
+
+** When creating a thread-specific breakpoint using the '-p' option,
+   the -break-insert command would report the 'thread' field twice in
+   the reply.  The content of both fields was always identical.  This
+   has now been fixed; the 'thread' field will be reported just once
+   for thread-specific breakpoints, or not at all for breakpoints
+   without a thread restriction.  The same is also true for the 'task'
+   field of an Ada task-specific breakpoint.
+
+** It is no longer possible to create a thread-specific breakpoint for
+   a thread that doesn't exist using '-break-insert -p ID'.  Creating
+   breakpoints for non-existent threads is not allowed when using the
+   CLI, that the MI allowed it was a long standing bug, which has now
+   been fixed.
+
+** The '--simple-values' argument to the '-stack-list-arguments',
+   '-stack-list-locals', '-stack-list-variables', and '-var-list-children'
+   commands now takes reference types into account: that is, a value is now
+   considered simple if it is neither an array, structure, or union, nor a
+   reference to an array, structure, or union.  (Previously all references were
+   considered simple.)  Support for this feature can be verified by using the
+   '-list-features' command, which should contain "simple-values-ref-types".
+
+* Python API
+
+  ** The gdb.unwinder.Unwinder.name attribute is now read-only.
+
+  ** The name argument passed to gdb.unwinder.Unwinder.__init__ must
+     now be of type 'str' otherwise a TypeError will be raised.
+
+  ** The gdb.unwinder.Unwinder.enabled attribute can now only accept
+     values of type 'bool'.  Changing this attribute will now
+     invalidate GDB's frame-cache, which means GDB will need to
+     rebuild its frame-cache when next required - either with, or
+     without the particular unwinder, depending on how 'enabled' was
+     changed.
+
+  ** New methods added to the gdb.PendingFrame class.  These methods
+     have the same behaviour as the corresponding methods on
+     gdb.Frame.  The new methods are:
+
+     - gdb.PendingFrame.name: Return the name for the frame's
+       function, or None.
+     - gdb.PendingFrame.is_valid: Return True if the pending frame
+       object is valid.
+     - gdb.PendingFrame.pc: Return the $pc register value for this
+       frame.
+     - gdb.PendingFrame.language: Return a string containing the
+       language for this frame, or None.
+     - gdb.PendingFrame.find_sal: Return a gdb.Symtab_and_line
+       object for the current location within the pending frame, or
+       None.
+     - gdb.PendingFrame.block: Return a gdb.Block for the current
+       pending frame, or None.
+     - gdb.PendingFrame.function: Return a gdb.Symbol for the
+       current pending frame, or None.
+
+  ** The frame-id passed to gdb.PendingFrame.create_unwind_info can
+     now use either an integer or a gdb.Value object for each of its
+     'sp', 'pc', and 'special' attributes.
+
+  ** A new class gdb.unwinder.FrameId has been added.  Instances of
+     this class are constructed with 'sp' (stack-pointer) and 'pc'
+     (program-counter) values, and can be used as the frame-id when
+     calling gdb.PendingFrame.create_unwind_info.
+
+  ** It is now no longer possible to sub-class the
+     gdb.disassembler.DisassemblerResult type.
+
+  ** The Disassembler API from the gdb.disassembler module has been
+     extended to include styling support:
+
+     - The DisassemblerResult class can now be initialized with a list
+       of parts.  Each part represents part of the disassembled
+       instruction along with the associated style information.  This
+       list of parts can be accessed with the new
+       DisassemblerResult.parts property.
+
+     - New constants gdb.disassembler.STYLE_* representing all the
+       different styles part of an instruction might have.
+
+     - New methods DisassembleInfo.text_part and
+       DisassembleInfo.address_part which are used to create the new
+       styled parts of a disassembled instruction.
+
+     - Changes are backwards compatible, the older API can still be
+       used to disassemble instructions without styling.
+
+  ** New function gdb.execute_mi(COMMAND, [ARG]...), that invokes a
+     GDB/MI command and returns the output as a Python dictionary.
+
+  ** gdb.parse_and_eval now has a new "global_context" parameter.
+     This can be used to request that the parse only examine global
+     symbols.
+
+  ** gdb.Inferior now has a new "arguments" attribute.  This holds the
+     command-line arguments to the inferior, if known.
+
+  ** gdb.Inferior now has a new "main_name" attribute.  This holds the
+     name of the inferior's "main", if known.
+
+  ** gdb.Inferior now has new methods "clear_env", "set_env", and
+     "unset_env".  These can be used to modify the inferior's
+     environment before it is started.
 
 *** Changes in GDB 13
 

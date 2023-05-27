@@ -4631,7 +4631,7 @@ Some machine configurations provide additional directives.
 @end ifclear
 * 2byte::                       @code{.2byte @var{expressions}}
 * 4byte::                       @code{.4byte @var{expressions}}
-* 8byte::                       @code{.8byte @var{bignums}}
+* 8byte::                       @code{.8byte @var{expressions}}
 * Deprecated::                  Deprecated Directives
 @end menu
 
@@ -4877,6 +4877,11 @@ same number of @code{.bundle_lock} and @code{.bundle_unlock} directives.
 @cindex integers, one byte
 @code{.byte} expects zero or more expressions, separated by commas.
 Each expression is assembled into the next byte.
+
+Note - this directive is not intended for encoding instructions, and it will
+not trigger effects like DWARF line number generation.  Instead some targets
+support special directives for encoding arbitrary binary sequences as
+instructions such as @code{.insn} or @code{.inst}.
 
 @node CFI directives
 @section CFI directives
@@ -5176,6 +5181,11 @@ If no suffix is used then @samp{.w} is assumed.
 The byte ordering is target dependent, as is the size and format of floating
 point values.
 
+Note - these directives are not intended for encoding instructions, and they
+will not trigger effects like DWARF line number generation.  Instead some
+targets support special directives for encoding arbitrary binary sequences as
+instructions such as @code{.insn} or @code{.inst}.
+
 @node Dcb
 @section @code{.dcb[@var{size}] @var{number} [,@var{fill}]}
 @cindex @code{dcb} directive
@@ -5235,7 +5245,6 @@ suffixes do not indicate that floating-point values are to be inserted.
 If the @var{size} suffix is omitted then @samp{.w} is assumed.
 
 The byte ordering is target dependent.
-
 
 @ifset COFF
 @node Def
@@ -5770,6 +5779,11 @@ integers.  On the H8/300H and the Renesas SH, however, @code{.int} emits
 32-bit integers.
 @end ifset
 @end ifclear
+
+Note - this directive is not intended for encoding instructions, and it will
+not trigger effects like DWARF line number generation.  Instead some targets
+support special directives for encoding arbitrary binary sequences as
+instructions such as eg @code{.insn} or @code{.inst}.
 
 @ifset ELF
 @node Internal
@@ -6565,14 +6579,16 @@ as in the @code{.section} (@pxref{Section}) directive.
 @end ifset
 
 @node Quad
-@section @code{.quad @var{bignums}}
+@section @code{.quad @var{expressions}}
 
 @cindex @code{quad} directive
-@code{.quad} expects zero or more bignums, separated by commas.  For
-each bignum, it emits
 @ifclear bignum-16
-an 8-byte integer.  If the bignum won't fit in 8 bytes, it prints a
-warning message; and just takes the lowest order 8 bytes of the bignum.
+For 64-bit architectures, or more generally with any GAS configured to support
+64-bit target virtual addresses, this is like @samp{.int}, but emitting 64-bit
+quantities.  Otherwise @code{.quad} expects zero or more bignums, separated by
+commas.  For each item, it emits an 8-byte integer.  If a bignum won't fit in
+8 bytes, a warning message is printed and just the lowest order 8 bytes of the
+bignum are taken.
 @cindex eight-byte integer
 @cindex integer, 8-byte
 
@@ -6580,11 +6596,19 @@ The term ``quad'' comes from contexts in which a ``word'' is two bytes;
 hence @emph{quad}-word for 8 bytes.
 @end ifclear
 @ifset bignum-16
-a 16-byte integer.  If the bignum won't fit in 16 bytes, it prints a
-warning message; and just takes the lowest order 16 bytes of the bignum.
+@code{.quad} expects zero or more bignums, separated by commas.  For
+each bignum, it emits a 16-byte integer.  If the bignum won't fit in 16
+bytes, it prints a warning message; and just takes the lowest order 16
+bytes of the bignum.
+@xref{Octa,,@code{.octa @var{bignums}}}.
 @cindex sixteen-byte integer
 @cindex integer, 16-byte
 @end ifset
+
+Note - this directive is not intended for encoding instructions, and it will
+not trigger effects like DWARF line number generation.  Instead some targets
+support special directives for encoding arbitrary binary sequences as
+instructions such as @code{.insn} or @code{.inst}.
 
 @node Reloc
 @section @code{.reloc @var{offset}, @var{reloc_name}[, @var{expression}]}
@@ -6939,7 +6963,7 @@ the section name is not recognized, the default will be for the section to have
 none of the above flags: it will not be allocated in memory, nor writable, nor
 executable.  The section will contain data.
 
-For ELF targets, the assembler supports another type of @code{.section}
+For SPARC ELF targets, the assembler supports another type of @code{.section}
 directive for compatibility with the Solaris assembler:
 
 @smallexample
@@ -7016,6 +7040,11 @@ This expects zero or more @var{expressions}, and emits
 a 16 bit number for each.
 @end ifset
 @end ifclear
+
+Note - this directive is not intended for encoding instructions, and it will
+not trigger effects like DWARF line number generation.  Instead some targets
+support special directives for encoding arbitrary binary sequences as
+instructions such as @code{.insn} or @code{.inst}.
 
 @node Single
 @section @code{.single @var{flonums}}
@@ -7669,8 +7698,11 @@ long values into the output.
 @cindex eight-byte integer
 @cindex integer, 8-byte
 
-Like the @option{.2byte} directive, except that it inserts unaligned, eight
-byte long bignum values into the output.
+For 64-bit architectures, or more generally with any GAS configured to support
+64-bit target virtual addresses, this is like the @option{.2byte} directive,
+except that it inserts unaligned, eight byte long values into the output.
+Otherwise, like @ref{Quad,,@code{.quad @var{expressions}}}, it expects zero or
+more bignums, separated by commas.
 
 @node Deprecated
 @section Deprecated Directives
@@ -7792,6 +7824,17 @@ registers and 32-bit general-purpose registers.
 registers, 32-bit general-purpose registers and a rule that forbids the
 direct use of odd-numbered single-precision floating-point registers.
 @end itemize
+
+@item Tag_GNU_MIPS_ABI_MSA (8)
+The MIPS SIMD Architecture (MSA) ABI used by this object file.  The value will be:
+
+@itemize @bullet
+@item
+0 for file not tagged or not using any ABIs affected by MSA.
+@item
+1 for files using 128 bit MSA.
+@end itemize
+
 @end table
 
 @subsection PowerPC Attributes

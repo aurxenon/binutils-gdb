@@ -746,6 +746,7 @@ LIBEXPAT
 HAVE_LIBEXPAT
 JIT_READER_DIR
 TARGET_PTR
+READLINE_DOC_SOURCE_INCLUDES
 READLINE_TEXI_INCFLAG
 READLINE_CFLAGS
 READLINE_DEPS
@@ -912,7 +913,6 @@ with_auto_load_safe_path
 enable_targets
 enable_64_bit_bfd
 with_amd_dbgapi
-enable_gdbmi
 enable_tui
 enable_gdbtk
 with_debuginfod
@@ -1629,7 +1629,6 @@ Optional Features:
   --enable-targets=TARGETS
                           alternative target configurations
   --enable-64-bit-bfd     64-bit support (on hosts with narrower word sizes)
-  --disable-gdbmi         disable machine-interface (MI)
   --enable-tui            enable full-screen terminal user interface (TUI)
   --enable-gdbtk          enable gdbtk graphical user interface (GUI)
   --enable-profiling      enable profiling of GDB
@@ -11449,7 +11448,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11452 "configure"
+#line 11451 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11555,7 +11554,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11558 "configure"
+#line 11557 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -18252,6 +18251,9 @@ $as_echo "yes" >&6; }
 fi
 
   if test "$has_amd_dbgapi" = "yes"; then
+
+$as_echo "#define HAVE_AMD_DBGAPI 1" >>confdefs.h
+
     TARGET_OBS="$TARGET_OBS amd-dbgapi-target.o"
 
     # If --enable-targets=all was provided, use the list of all files depending
@@ -18298,31 +18300,6 @@ cat >>confdefs.h <<_ACEOF
 #define DEFAULT_BFD_VEC $targ_defvec
 _ACEOF
 
-fi
-
-# Enable MI.
-# Check whether --enable-gdbmi was given.
-if test "${enable_gdbmi+set}" = set; then :
-  enableval=$enable_gdbmi;
-	   case $enableval in
-	     yes | no)
-	       ;;
-	     *)
-	       as_fn_error $? "bad value $enableval for --enable-gdbmi" "$LINENO" 5
-	       ;;
-	   esac
-
-else
-  enable_gdbmi=yes
-fi
-
-if test x"$enable_gdbmi" = xyes; then
-  if test -d "$srcdir/mi"; then
-    CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_MI_OBS)"
-    CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_MI_DEPS)"
-    CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_MI_SRCS)"
-    ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_MI_CFLAGS)"
-  fi
 fi
 
 # Enable TUI.
@@ -20620,31 +20597,29 @@ $as_echo "$ac_cv_search_waddstr" >&6; }
 ac_res=$ac_cv_search_waddstr
 if test "$ac_res" != no; then :
   test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+  curses_found=yes
+
+$as_echo "#define HAVE_LIBCURSES 1" >>confdefs.h
+
 
 fi
 
-
-  if test "$ac_cv_search_waddstr" != no; then
-    curses_found=yes
-  fi
 fi
 
 # Check whether we should enable the TUI, but only do so if we really
 # can.
 if test x"$enable_tui" != xno; then
-  if test -d "$srcdir/tui"; then
-    if test "$curses_found" != no; then
-      CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_TUI_OBS)"
-      CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_TUI_DEPS)"
-      CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_TUI_SRCS)"
-      ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_TUI_CFLAGS)"
+  if test "$curses_found" != no; then
+    CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_TUI_OBS)"
+    CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_TUI_DEPS)"
+    CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_TUI_SRCS)"
+    ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_TUI_CFLAGS)"
+  else
+    if test x"$enable_tui" = xyes; then
+      as_fn_error $? "no enhanced curses library found; disable TUI" "$LINENO" 5
     else
-      if test x"$enable_tui" = xyes; then
-	as_fn_error $? "no enhanced curses library found; disable TUI" "$LINENO" 5
-      else
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: no enhanced curses library found; disabling TUI" >&5
+      { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: no enhanced curses library found; disabling TUI" >&5
 $as_echo "$as_me: WARNING: no enhanced curses library found; disabling TUI" >&2;}
-      fi
     fi
   fi
 fi
@@ -20790,12 +20765,15 @@ $as_echo "$gdb_cv_readline_ok" >&6; }
   READLINE_DEPS=
   READLINE_CFLAGS=
   READLINE_TEXI_INCFLAG=
+  READLINE_DOC_SOURCE_INCLUDES='$(READLINE_SYSTEM_DOC_INCLUDES)'
 else
   READLINE='$(READLINE_DIR)/libreadline.a'
   READLINE_DEPS='$(READLINE)'
   READLINE_CFLAGS='-I$(READLINE_SRC)/..'
   READLINE_TEXI_INCFLAG='-I $(READLINE_DIR)'
+  READLINE_DOC_SOURCE_INCLUDES='$(READLINE_INTREE_DOC_INCLUDES)'
 fi
+
 
 
 
@@ -28228,7 +28206,7 @@ WIN32LIBS="$WIN32LIBS $WIN32APILIBS"
   # points somewhere with bfd, with -I/foo/lib and -L/foo/lib.  We
   # always want our bfd.
   CFLAGS="-I${srcdir}/../include -I../bfd -I${srcdir}/../bfd $CFLAGS"
-  LDFLAGS="-L../bfd -L../libiberty"
+  LDFLAGS="-L../bfd -L../libiberty $LDFLAGS"
   intl=`echo $LIBINTL | sed 's,${top_builddir}/,,g'`
   LIBS="-lbfd -liberty $intl $LIBS"
   CC="./libtool --quiet --mode=link $CC"
@@ -28345,7 +28323,7 @@ fi
   # points somewhere with bfd, with -I/foo/lib and -L/foo/lib.  We
   # always want our bfd.
   CFLAGS="-I${srcdir}/../include -I../bfd -I${srcdir}/../bfd $CFLAGS"
-  LDFLAGS="-L../bfd -L../libiberty"
+  LDFLAGS="-L../bfd -L../libiberty $LDFLAGS"
   intl=`echo $LIBINTL | sed 's,${top_builddir}/,,g'`
   LIBS="-lbfd -liberty $intl $LIBS"
   CC="./libtool --quiet --mode=link $CC"

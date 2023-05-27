@@ -21,14 +21,24 @@
 #include "dwarf2/cooked-index.h"
 #include "dwarf2/read.h"
 #include "dwarf2/stringify.h"
+#include "dwarf2/index-cache.h"
 #include "cp-support.h"
 #include "c-lang.h"
 #include "ada-lang.h"
 #include "split-name.h"
+#include "observable.h"
+#include "run-on-main-thread.h"
 #include <algorithm>
-#include "safe-ctype.h"
+#include "gdbsupport/gdb-safe-ctype.h"
 #include "gdbsupport/selftest.h"
 #include <chrono>
+#include <unordered_set>
+#include "cli/cli-cmds.h"
+
+/* We don't want gdb to exit while it is in the process of writing to
+   the index cache.  So, all live cooked index vectors are stored
+   here, and then these are all waited for before exit proceeds.  */
+static std::unordered_set<cooked_index *> active_vectors;
 
 /* See cooked-index.h.  */
 
@@ -44,6 +54,16 @@ to_string (cooked_index_flag flags)
   };
 
   return flags.to_string (mapping);
+}
+
+/* See cooked-index.h.  */
+
+bool
+language_requires_canonicalization (enum language lang)
+{
+  return (lang == language_ada
+	  || lang == language_c
+	  || lang == language_cplus);
 }
 
 /* See cooked-index.h.  */
@@ -162,10 +182,12 @@ test_compare ()
 /* See cooked-index.h.  */
 
 const char *
-cooked_index_entry::full_name (struct obstack *storage) const
+cooked_index_entry::full_name (struct obstack *storage, bool for_main) const
 {
+  const char *local_name = for_main ? name : canonical;
+
   if ((flags & IS_LINKAGE) != 0 || parent_entry == nullptr)
-    return canonical;
+    return local_name;
 
   const char *sep = nullptr;
   switch (per_cu->lang ())
@@ -182,11 +204,11 @@ cooked_index_entry::full_name (struct obstack *storage) const
       break;
 
     default:
-      return canonical;
+      return local_name;
     }
 
-  parent_entry->write_scope (storage, sep);
-  obstack_grow0 (storage, canonical, strlen (canonical));
+  parent_entry->write_scope (storage, sep, for_main);
+  obstack_grow0 (storage, local_name, strlen (local_name));
   return (const char *) obstack_finish (storage);
 }
 
@@ -194,11 +216,13 @@ cooked_index_entry::full_name (struct obstack *storage) const
 
 void
 cooked_index_entry::write_scope (struct obstack *storage,
-				 const char *sep) const
+				 const char *sep,
+				 bool for_main) const
 {
   if (parent_entry != nullptr)
-    parent_entry->write_scope (storage, sep);
-  obstack_grow (storage, canonical, strlen (canonical));
+    parent_entry->write_scope (storage, sep, for_main);
+  const char *local_name = for_main ? name : canonical;
+  obstack_grow (storage, local_name, strlen (local_name));
   obstack_grow (storage, sep, strlen (sep));
 }
 
@@ -217,10 +241,6 @@ cooked_index_shard::add (sect_offset die_offset, enum dwarf_tag tag,
   /* An explicitly-tagged main program should always override the
      implicit "main" discovery.  */
   if ((flags & IS_MAIN) != 0)
-    m_main = result;
-  else if (per_cu->lang () != language_ada
-	   && m_main == nullptr
-	   && strcmp (name, "main") == 0)
     m_main = result;
 
   return result;
@@ -323,6 +343,8 @@ cooked_index_shard::do_finalize ()
 
   for (cooked_index_entry *entry : m_entries)
     {
+      /* Note that this code must be kept in sync with
+	 language_requires_canonicalization.  */
       gdb_assert (entry->canonical == nullptr);
       if ((entry->flags & IS_LINKAGE) != 0)
 	entry->canonical = entry->name;
@@ -356,6 +378,7 @@ cooked_index_shard::do_finalize ()
 		  entry->canonical = canon_name.get ();
 		  m_names.push_back (std::move (canon_name));
 		}
+	      *slot = entry;
 	    }
 	  else
 	    {
@@ -425,6 +448,47 @@ cooked_index::cooked_index (vec_type &&vec)
 {
   for (auto &idx : m_vector)
     idx->finalize ();
+
+  /* ACTIVE_VECTORS is not locked, and this assert ensures that this
+     will be caught if ever moved to the background.  */
+  gdb_assert (is_main_thread ());
+  active_vectors.insert (this);
+}
+
+/* See cooked-index.h.  */
+
+void
+cooked_index::start_writing_index (dwarf2_per_bfd *per_bfd)
+{
+  /* This must be set after all the finalization tasks have been
+     started, because it may call 'wait'.  */
+  m_write_future
+    = gdb::thread_pool::g_thread_pool->post_task ([this, per_bfd] ()
+	{
+	  maybe_write_index (per_bfd);
+	});
+}
+
+cooked_index::~cooked_index ()
+{
+  /* The 'finalize' method may be run in a different thread.  If
+     this object is destroyed before this completes, then the method
+     will end up writing to freed memory.  Waiting for this to
+     complete avoids this problem; and the cost seems ignorable
+     because creating and immediately destroying the debug info is a
+     relatively rare thing to do.  */
+  for (auto &item : m_vector)
+    item->wait (false);
+
+  /* Likewise for the index-creating future, though this one must also
+     waited for by the per-BFD object to ensure the required data
+     remains live.  */
+  wait_completely ();
+
+  /* Remove our entry from the global list.  See the assert in the
+     constructor to understand this.  */
+  gdb_assert (is_main_thread ());
+  active_vectors.erase (this);
 }
 
 /* See cooked-index.h.  */
@@ -474,11 +538,15 @@ cooked_index::get_main () const
   for (const auto &index : m_vector)
     {
       const cooked_index_entry *entry = index->get_main ();
-      if (result == nullptr
-	  || ((result->flags & IS_MAIN) == 0
-	      && entry != nullptr
-	      && (entry->flags & IS_MAIN) != 0))
-	result = entry;
+      /* Choose the first "main" we see.  The choice among several is
+	 arbitrary.  See the comment by the sole caller to understand
+	 the rationale for filtering by language.  */
+      if (entry != nullptr
+	  && !language_requires_canonicalization (entry->per_cu->lang ()))
+	{
+	  result = entry;
+	  break;
+	}
     }
 
   return result;
@@ -560,6 +628,34 @@ cooked_index::dump (gdbarch *arch) const
     }
 }
 
+void
+cooked_index::maybe_write_index (dwarf2_per_bfd *per_bfd)
+{
+  /* Wait for finalization.  */
+  wait ();
+
+  /* (maybe) store an index in the cache.  */
+  global_index_cache.store (per_bfd);
+}
+
+/* Wait for all the index cache entries to be written before gdb
+   exits.  */
+static void
+wait_for_index_cache (int)
+{
+  gdb_assert (is_main_thread ());
+  for (cooked_index *item : active_vectors)
+    item->wait_completely ();
+}
+
+/* A maint command to wait for the cache.  */
+
+static void
+maintenance_wait_for_index_cache (const char *args, int from_tty)
+{
+  wait_for_index_cache (0);
+}
+
 void _initialize_cooked_index ();
 void
 _initialize_cooked_index ()
@@ -567,4 +663,12 @@ _initialize_cooked_index ()
 #if GDB_SELF_TEST
   selftests::register_test ("cooked_index_entry::compare", test_compare);
 #endif
+
+  add_cmd ("wait-for-index-cache", class_maintenance,
+	   maintenance_wait_for_index_cache, _("\
+Wait until all pending writes to the index cache have completed.\n\
+Usage: maintenance wait-for-index-cache"),
+	   &maintenancelist);
+
+  gdb::observers::gdb_exiting.attach (wait_for_index_cache, "cooked-index");
 }

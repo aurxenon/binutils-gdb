@@ -270,6 +270,13 @@ bppy_set_thread (PyObject *self, PyObject *newvalue, void *closure)
 			   _("Invalid thread ID."));
 	  return -1;
 	}
+
+      if (self_bp->bp->task != -1)
+	{
+	  PyErr_SetString (PyExc_RuntimeError,
+			   _("Cannot set both task and thread attributes."));
+	  return -1;
+	}
     }
   else if (newvalue == Py_None)
     id = -1;
@@ -321,9 +328,16 @@ bppy_set_task (PyObject *self, PyObject *newvalue, void *closure)
 			   _("Invalid task ID."));
 	  return -1;
 	}
+
+      if (self_bp->bp->thread != -1)
+	{
+	  PyErr_SetString (PyExc_RuntimeError,
+			   _("Cannot set both task and thread attributes."));
+	  return -1;
+	}
     }
   else if (newvalue == Py_None)
-    id = 0;
+    id = -1;
   else
     {
       PyErr_SetString (PyExc_TypeError,
@@ -697,7 +711,7 @@ bppy_get_task (PyObject *self, void *closure)
 
   BPPY_REQUIRE_VALID (self_bp);
 
-  if (self_bp->bp->task == 0)
+  if (self_bp->bp->task == -1)
     Py_RETURN_NONE;
 
   return gdb_py_object_from_longest (self_bp->bp->task).release ();
@@ -738,14 +752,14 @@ bppy_get_locations (PyObject *self, void *closure)
   if (list == nullptr)
     return nullptr;
 
-  for (bp_location *loc : self_bp->bp->locations ())
+  for (bp_location &loc : self_bp->bp->locations ())
     {
       gdbpy_ref<py_bploc_t> py_bploc
 	(PyObject_New (py_bploc_t, &breakpoint_location_object_type));
       if (py_bploc == nullptr)
 	return nullptr;
 
-      bp_location_ref_ptr ref = bp_location_ref_ptr::new_reference (loc);
+      bp_location_ref_ptr ref = bp_location_ref_ptr::new_reference (&loc);
       /* The location takes a reference to the owner breakpoint.
 	 Decrements when they are de-allocated in bplocpy_dealloc */
       Py_INCREF (self);
@@ -1021,8 +1035,8 @@ gdbpy_breakpoints (PyObject *self, PyObject *args)
 
   /* If build_bp_list returns false, it signals an error condition.  In that
      case abandon building the list and return nullptr.  */
-  for (breakpoint *bp : all_breakpoints ())
-    if (!build_bp_list (bp, list.get ()))
+  for (breakpoint &bp : all_breakpoints ())
+    if (!build_bp_list (&bp, list.get ()))
       return nullptr;
 
   return PyList_AsTuple (list.get ());
@@ -1185,6 +1199,9 @@ gdbpy_breakpoint_deleted (struct breakpoint *b)
       gdbpy_ref<gdbpy_breakpoint_object> bp_obj (bp->py_bp_object);
       if (bp_obj != NULL)
 	{
+	  if (bp_obj->is_finish_bp)
+	    bpfinishpy_pre_delete_hook (bp_obj.get ());
+
 	  if (!evregpy_no_listeners_p (gdb_py_events.breakpoint_deleted))
 	    {
 	      if (evpy_emit_event ((PyObject *) bp_obj.get (),
@@ -1229,7 +1246,7 @@ gdbpy_breakpoint_modified (struct breakpoint *b)
 
 
 /* Initialize the Python breakpoint code.  */
-int
+static int CPYCHECKER_NEGATIVE_RESULT_SETS_EXCEPTION
 gdbpy_initialize_breakpoints (void)
 {
   int i;
@@ -1269,7 +1286,7 @@ gdbpy_initialize_breakpoints (void)
 
 /* Initialize the Python BreakpointLocation code.  */
 
-int
+static int CPYCHECKER_NEGATIVE_RESULT_SETS_EXCEPTION
 gdbpy_initialize_breakpoint_locations ()
 {
   if (PyType_Ready (&breakpoint_location_object_type) < 0)
@@ -1432,6 +1449,9 @@ _initialize_py_breakpoint ()
 	show_pybp_debug,
 	&setdebuglist, &showdebuglist);
 }
+
+GDBPY_INITIALIZE_FILE (gdbpy_initialize_breakpoints);
+GDBPY_INITIALIZE_FILE (gdbpy_initialize_breakpoint_locations);
 
 /* Python function to set the enabled state of a breakpoint location.  */
 

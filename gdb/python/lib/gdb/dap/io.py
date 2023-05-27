@@ -1,4 +1,4 @@
-# Copyright 2022 Free Software Foundation, Inc.
+# Copyright 2022-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
 
 import json
 
-from .startup import start_thread, send_gdb
+from .startup import start_thread, send_gdb, log
 
 
 def read_json(stream):
@@ -31,6 +31,8 @@ def read_json(stream):
         if line.startswith(b"Content-Length:"):
             line = line[15:].strip()
             content_length = int(line)
+            continue
+        log("IGNORED: <<<%s>>>" % line)
     data = bytes()
     while len(data) < content_length:
         new_data = stream.read(content_length - len(data))

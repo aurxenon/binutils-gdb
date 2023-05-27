@@ -88,6 +88,8 @@ enum
   CpuLZCNT,
   /* POPCNT support required */
   CpuPOPCNT,
+  /* MONITOR support required */
+  CpuMONITOR,
   /* SSE4.1 support required */
   CpuSSE4_1,
   /* SSE4.2 support required */
@@ -137,6 +139,8 @@ enum
   CpuMovbe,
   /* CMPXCHG16B instruction support required.  */
   CpuCX16,
+  /* LAHF/SAHF instruction support required (in 64-bit mode).  */
+  CpuLAHF_SAHF,
   /* EPT Instructions required */
   CpuEPT,
   /* RDTSCP Instruction support required */
@@ -225,6 +229,10 @@ enum
   CpuAVX_NE_CONVERT,
   /* Intel RAO INT Instructions support required.  */
   CpuRAO_INT,
+  /* fred instruction required */
+  CpuFRED,
+  /* lkgs instruction required */
+  CpuLKGS,
   /* mwaitx instruction required */
   CpuMWAITX,
   /* Clzero instruction required */
@@ -244,6 +252,8 @@ enum
   CpuAMX_BF16,
   /* AMX-FP16 instructions required */
   CpuAMX_FP16,
+  /* AMX-COMPLEX instructions required.  */
+  CpuAMX_COMPLEX,
   /* AMX-TILE instructions required */
   CpuAMX_TILE,
   /* GFNI instructions required */
@@ -348,6 +358,7 @@ typedef union i386_cpu_flags
       unsigned int cpusse4a:1;
       unsigned int cpulzcnt:1;
       unsigned int cpupopcnt:1;
+      unsigned int cpumonitor:1;
       unsigned int cpusse4_1:1;
       unsigned int cpusse4_2:1;
       unsigned int cpuavx:1;
@@ -372,6 +383,7 @@ typedef union i386_cpu_flags
       unsigned int cputbm:1;
       unsigned int cpumovbe:1;
       unsigned int cpucx16:1;
+      unsigned int cpulahf_sahf:1;
       unsigned int cpuept:1;
       unsigned int cpurdtscp:1;
       unsigned int cpufsgsbase:1;
@@ -416,6 +428,8 @@ typedef union i386_cpu_flags
       unsigned int cpumsrlist:1;
       unsigned int cpuavx_ne_convert:1;
       unsigned int cpurao_int:1;
+      unsigned int cpufred:1;
+      unsigned int cpulkgs:1;
       unsigned int cpumwaitx:1;
       unsigned int cpuclzero:1;
       unsigned int cpuospke:1;
@@ -426,6 +440,7 @@ typedef union i386_cpu_flags
       unsigned int cpuamx_int8:1;
       unsigned int cpuamx_bf16:1;
       unsigned int cpuamx_fp16:1;
+      unsigned int cpuamx_complex:1;
       unsigned int cpuamx_tile:1;
       unsigned int cpugfni:1;
       unsigned int cpuvaes:1;
@@ -577,23 +592,8 @@ enum
   Vex,
   /* How to encode VEX.vvvv:
      0: VEX.vvvv must be 1111b.
-     1: VEX.NDS.  Register-only source is encoded in VEX.vvvv where
-	the content of source registers will be preserved.
-	VEX.DDS.  The second register operand is encoded in VEX.vvvv
-	where the content of first source register will be overwritten
-	by the result.
-	VEX.NDD2.  The second destination register operand is encoded in
-	VEX.vvvv for instructions with 2 destination register operands.
-	For assembler, there are no difference between VEX.NDS, VEX.DDS
-	and VEX.NDD2.
-     2. VEX.NDD.  Register destination is encoded in VEX.vvvv for
-     instructions with 1 destination register operand.
-     3. VEX.LWP.  Register destination is encoded in VEX.vvvv and one
-	of the operands can access a memory location.
+     1: VEX.vvvv encodes one of the register operands.
    */
-#define VEXXDS	1
-#define VEXNDD	2
-#define VEXLWP	3
   VexVVVV,
   /* How the VEX.W bit is used:
      0: Set by the REX.W bit.
@@ -605,28 +605,6 @@ enum
 #define VEXW1	2
 #define VEXWIG	3
   VexW,
-  /* Opcode encoding space (values chosen to be usable directly in
-     VEX/XOP mmmmm and EVEX mm fields):
-     0: Base opcode space.
-     1: 0F opcode prefix / space.
-     2: 0F38 opcode prefix / space.
-     3: 0F3A opcode prefix / space.
-     5: EVEXMAP5 opcode prefix / space.
-     6: EVEXMAP6 opcode prefix / space.
-     8: XOP 08 opcode space.
-     9: XOP 09 opcode space.
-     A: XOP 0A opcode space.
-   */
-#define SPACE_BASE	0
-#define SPACE_0F	1
-#define SPACE_0F38	2
-#define SPACE_0F3A	3
-#define SPACE_EVEXMAP5	5
-#define SPACE_EVEXMAP6	6
-#define SPACE_XOP08	8
-#define SPACE_XOP09	9
-#define SPACE_XOP0A	0xA
-  OpcodeSpace,
   /* Opcode prefix (values chosen to be usable directly in
      VEX/XOP/EVEX pp fields):
      0: None
@@ -639,14 +617,6 @@ enum
 #define PREFIX_0XF3	2
 #define PREFIX_0XF2	3
   OpcodePrefix,
-  /* number of VEX source operands:
-     0: <= 2 source operands.
-     1: 2 XOP source operands.
-     2: 3 source operands.
-   */
-#define XOP2SOURCES	1
-#define VEX3SOURCES	2
-  VexSources,
   /* Instruction with a mandatory SIB byte:
 	1: 128bit vector register.
 	2: 256bit vector register.
@@ -667,12 +637,14 @@ enum
 	3: 256bit EVEX prefix.
 	4: Length-ignored (LIG) EVEX prefix.
 	5: Length determined from actual operands.
+	6: L'L = 3 (reserved, .insn only)
    */
 #define EVEX512                1
 #define EVEX128                2
 #define EVEX256                3
 #define EVEXLIG                4
 #define EVEXDYN                5
+#define EVEX_L3                6
   EVex,
 
   /* AVX512 masking support:
@@ -757,11 +729,9 @@ typedef struct i386_opcode_modifier
   unsigned int immext:1;
   unsigned int norex64:1;
   unsigned int vex:2;
-  unsigned int vexvvvv:2;
+  unsigned int vexvvvv:1;
   unsigned int vexw:2;
-  unsigned int opcodespace:4;
   unsigned int opcodeprefix:2;
-  unsigned int vexsources:2;
   unsigned int sib:3;
   unsigned int sse2avx:1;
   unsigned int evex:3;
@@ -942,8 +912,29 @@ typedef struct insn_template
   /* how many operands */
   unsigned int operands:3;
 
-  /* spare bits */
-  unsigned int :4;
+  /* opcode space */
+  unsigned int opcode_space:4;
+  /* Opcode encoding space (values chosen to be usable directly in
+     VEX/XOP mmmmm and EVEX mm fields):
+     0: Base opcode space.
+     1: 0F opcode prefix / space.
+     2: 0F38 opcode prefix / space.
+     3: 0F3A opcode prefix / space.
+     5: EVEXMAP5 opcode prefix / space.
+     6: EVEXMAP6 opcode prefix / space.
+     8: XOP 08 opcode space.
+     9: XOP 09 opcode space.
+     A: XOP 0A opcode space.
+   */
+#define SPACE_BASE	0
+#define SPACE_0F	1
+#define SPACE_0F38	2
+#define SPACE_0F3A	3
+#define SPACE_EVEXMAP5	5
+#define SPACE_EVEXMAP6	6
+#define SPACE_XOP08	8
+#define SPACE_XOP09	9
+#define SPACE_XOP0A	0xA
 
 /* (Fake) base opcode value for pseudo prefixes.  */
 #define PSEUDO_PREFIX 0

@@ -59,9 +59,6 @@
 #include "language.h"
 #include "c-lang.h"
 #include "go-lang.h"
-#include "bfd.h" /* Required by objfiles.h.  */
-#include "symfile.h" /* Required by objfiles.h.  */
-#include "objfiles.h" /* For have_full_symbols and have_partial_symbols */
 #include "charset.h"
 #include "block.h"
 #include "expop.h"
@@ -1396,16 +1393,16 @@ classify_name (struct parser_state *par_state, const struct block *block)
      current package.  */
 
   {
-    char *current_package_name = go_block_package_name (block);
+    gdb::unique_xmalloc_ptr<char> current_package_name
+      = go_block_package_name (block);
 
     if (current_package_name != NULL)
       {
 	struct stoken sval =
-	  build_packaged_name (current_package_name,
-			       strlen (current_package_name),
+	  build_packaged_name (current_package_name.get (),
+			       strlen (current_package_name.get ()),
 			       copy.c_str (), copy.size ());
 
-	xfree (current_package_name);
 	sym = lookup_symbol (sval.ptr, block, VAR_DOMAIN,
 			     &is_a_field_of_this);
 	if (sym.symbol)
@@ -1528,7 +1525,7 @@ go_language::parser (struct parser_state *par_state) const
   pstate = par_state;
 
   scoped_restore restore_yydebug = make_scoped_restore (&yydebug,
-							parser_debug);
+							par_state->debug);
 
   /* Initialize some state used by the lexer.  */
   last_was_structop = 0;

@@ -262,7 +262,7 @@ value_of_register (int regnum, frame_info_ptr frame)
     return value_of_user_reg (regnum, frame);
 
   reg_val = value_of_register_lazy (frame, regnum);
-  value_fetch_lazy (reg_val);
+  reg_val->fetch_lazy ();
   return reg_val;
 }
 
@@ -294,8 +294,8 @@ value_of_register_lazy (frame_info_ptr frame, int regnum)
   /* We should have a valid next frame.  */
   gdb_assert (frame_id_p (get_frame_id (next_frame)));
 
-  reg_val = allocate_value_lazy (register_type (gdbarch, regnum));
-  VALUE_LVAL (reg_val) = lval_register;
+  reg_val = value::allocate_lazy (register_type (gdbarch, regnum));
+  reg_val->set_lval (lval_register);
   VALUE_REGNUM (reg_val) = regnum;
   VALUE_NEXT_FRAME_ID (reg_val) = get_frame_id (next_frame);
 
@@ -460,8 +460,8 @@ get_hosting_frame (struct symbol *var, const struct block *var_block,
      tests that embed global/static symbols with null location lists.
      We want to get <optimized out> instead of <frame required> when evaluating
      them so return a frame instead of raising an error.  */
-  else if (var_block == block_global_block (var_block)
-	   || var_block == block_static_block (var_block))
+  else if (var_block == var_block->global_block ()
+	   || var_block == var_block->static_block ())
     return frame;
 
   /* We have to handle the "my_func::my_local_var" notation.  This requires us
@@ -486,7 +486,7 @@ get_hosting_frame (struct symbol *var, const struct block *var_block,
 
       /* If we failed to find the proper frame, fallback to the heuristic
 	 method below.  */
-      else if (frame_block == block_global_block (frame_block))
+      else if (frame_block == frame_block->global_block ())
 	{
 	  frame = NULL;
 	  break;
@@ -498,7 +498,7 @@ get_hosting_frame (struct symbol *var, const struct block *var_block,
       else if (frame_block->function ())
 	{
 	  const struct dynamic_prop *static_link
-	    = block_static_link (frame_block);
+	    = frame_block->static_link ();
 	  int could_climb_up = 0;
 
 	  if (static_link != NULL)
@@ -533,7 +533,7 @@ get_hosting_frame (struct symbol *var, const struct block *var_block,
       if (frame == NULL)
 	{
 	  if (var_block->function ()
-	      && !block_inlined_p (var_block)
+	      && !var_block->inlined_p ()
 	      && var_block->function ()->print_name ())
 	    error (_("No frame is currently executing in block %s."),
 		   var_block->function ()->print_name ());
@@ -586,10 +586,10 @@ language_defn::read_var_value (struct symbol *var,
 	  type = resolve_dynamic_type (type, {}, /* Unused address.  */ 0);
 	}
       /* Put the constant back in target format. */
-      v = allocate_value (type);
-      store_signed_integer (value_contents_raw (v).data (), type->length (),
+      v = value::allocate (type);
+      store_signed_integer (v->contents_raw ().data (), type->length (),
 			    type_byte_order (type), var->value_longest ());
-      VALUE_LVAL (v) = not_lval;
+      v->set_lval (not_lval);
       return v;
 
     case LOC_LABEL:
@@ -616,7 +616,7 @@ language_defn::read_var_value (struct symbol *var,
 	struct type *void_ptr_type
 	  = builtin_type (var->arch ())->builtin_data_ptr;
 	v = value_cast_pointers (void_ptr_type, v, 0);
-	VALUE_LVAL (v) = not_lval;
+	v->set_lval (not_lval);
 	return v;
       }
 
@@ -626,10 +626,10 @@ language_defn::read_var_value (struct symbol *var,
 	  /* Value is a constant byte-sequence and needs no memory access.  */
 	  type = resolve_dynamic_type (type, {}, /* Unused address.  */ 0);
 	}
-      v = allocate_value (type);
-      memcpy (value_contents_raw (v).data (), var->value_bytes (),
+      v = value::allocate (type);
+      memcpy (v->contents_raw ().data (), var->value_bytes (),
 	      type->length ());
-      VALUE_LVAL (v) = not_lval;
+      v->set_lval (not_lval);
       return v;
 
     case LOC_STATIC:
@@ -754,9 +754,9 @@ language_defn::read_var_value (struct symbol *var,
 	   a TLS variable. */
 	if (obj_section == NULL
 	    || (obj_section->the_bfd_section->flags & SEC_THREAD_LOCAL) != 0)
-	   addr = bmsym.minsym->value_raw_address ();
+	  addr = CORE_ADDR (bmsym.minsym->unrelocated_address ());
 	else
-	   addr = bmsym.value_address ();
+	  addr = bmsym.value_address ();
 	if (overlay_debugging)
 	  addr = symbol_overlayed_address (addr, obj_section);
 	/* Determine address of TLS variable. */
@@ -769,7 +769,7 @@ language_defn::read_var_value (struct symbol *var,
     case LOC_OPTIMIZED_OUT:
       if (is_dynamic_type (type))
 	type = resolve_dynamic_type (type, {}, /* Unused address.  */ 0);
-      return allocate_optimized_out_value (type);
+      return value::allocate_optimized_out (type);
 
     default:
       error (_("Cannot look up value of a botched symbol `%s'."),
@@ -801,10 +801,10 @@ default_value_from_register (struct gdbarch *gdbarch, struct type *type,
 			     int regnum, struct frame_id frame_id)
 {
   int len = type->length ();
-  struct value *value = allocate_value (type);
+  struct value *value = value::allocate (type);
   frame_info_ptr frame;
 
-  VALUE_LVAL (value) = lval_register;
+  value->set_lval (lval_register);
   frame = frame_find_by_id (frame_id);
 
   if (frame == NULL)
@@ -822,9 +822,9 @@ default_value_from_register (struct gdbarch *gdbarch, struct type *type,
   if (type_byte_order (type) == BFD_ENDIAN_BIG
       && len < register_size (gdbarch, regnum))
     /* Big-endian, and we want less than full size.  */
-    set_value_offset (value, register_size (gdbarch, regnum) - len);
+    value->set_offset (register_size (gdbarch, regnum) - len);
   else
-    set_value_offset (value, 0);
+    value->set_offset (0);
 
   return value;
 }
@@ -842,11 +842,11 @@ read_frame_register_value (struct value *value, frame_info_ptr frame)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
   LONGEST offset = 0;
-  LONGEST reg_offset = value_offset (value);
+  LONGEST reg_offset = value->offset ();
   int regnum = VALUE_REGNUM (value);
-  int len = type_length_units (check_typedef (value_type (value)));
+  int len = type_length_units (check_typedef (value->type ()));
 
-  gdb_assert (VALUE_LVAL (value) == lval_register);
+  gdb_assert (value->lval () == lval_register);
 
   /* Skip registers wholly inside of REG_OFFSET.  */
   while (reg_offset >= register_size (gdbarch, regnum))
@@ -859,14 +859,14 @@ read_frame_register_value (struct value *value, frame_info_ptr frame)
   while (len > 0)
     {
       struct value *regval = get_frame_register_value (frame, regnum);
-      int reg_len = type_length_units (value_type (regval)) - reg_offset;
+      int reg_len = type_length_units (regval->type ()) - reg_offset;
 
       /* If the register length is larger than the number of bytes
 	 remaining to copy, then only copy the appropriate bytes.  */
       if (reg_len > len)
 	reg_len = len;
 
-      value_contents_copy (value, offset, regval, reg_offset, reg_len);
+      regval->contents_copy (value, offset, reg_offset, reg_len);
 
       offset += reg_len;
       len -= reg_len;
@@ -895,20 +895,20 @@ value_from_register (struct type *type, int regnum, frame_info_ptr frame)
 	 the corresponding [integer] type (see Alpha).  The assumption
 	 is that gdbarch_register_to_value populates the entire value
 	 including the location.  */
-      v = allocate_value (type);
-      VALUE_LVAL (v) = lval_register;
+      v = value::allocate (type);
+      v->set_lval (lval_register);
       VALUE_NEXT_FRAME_ID (v) = get_frame_id (get_next_frame_sentinel_okay (frame));
       VALUE_REGNUM (v) = regnum;
       ok = gdbarch_register_to_value (gdbarch, frame, regnum, type1,
-				      value_contents_raw (v).data (), &optim,
+				      v->contents_raw ().data (), &optim,
 				      &unavail);
 
       if (!ok)
 	{
 	  if (optim)
-	    mark_value_bytes_optimized_out (v, 0, type->length ());
+	    v->mark_bytes_optimized_out (0, type->length ());
 	  if (unavail)
-	    mark_value_bytes_unavailable (v, 0, type->length ());
+	    v->mark_bytes_unavailable (0, type->length ());
 	}
     }
   else
@@ -971,7 +971,7 @@ address_from_register (int regnum, frame_info_ptr frame)
   value = gdbarch_value_from_register (gdbarch, type, regnum, null_frame_id);
   read_frame_register_value (value, frame);
 
-  if (value_optimized_out (value))
+  if (value->optimized_out ())
     {
       /* This function is used while computing a location expression.
 	 Complain about the value being optimized out, rather than

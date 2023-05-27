@@ -4914,8 +4914,7 @@ condition_true_at_tracepoint (struct tracepoint_hit_ctx *ctx,
   return (value ? 1 : 0);
 }
 
-/* Do memory copies for bytecodes.  */
-/* Do the recording of memory blocks for actions and bytecodes.  */
+/* See tracepoint.h.  */
 
 int
 agent_mem_read (struct eval_agent_expr_context *ctx,
@@ -4927,10 +4926,7 @@ agent_mem_read (struct eval_agent_expr_context *ctx,
 
   /* If a 'to' buffer is specified, use it.  */
   if (to != NULL)
-    {
-      read_inferior_memory (from, to, len);
-      return 0;
-    }
+    return read_inferior_memory (from, to, len);
 
   /* Otherwise, create a new memory block in the trace buffer.  */
   while (remaining > 0)
@@ -4951,7 +4947,8 @@ agent_mem_read (struct eval_agent_expr_context *ctx,
       memcpy (mspace, &blocklen, sizeof (blocklen));
       mspace += sizeof (blocklen);
       /* Record the memory block proper.  */
-      read_inferior_memory (from, mspace, blocklen);
+      if (read_inferior_memory (from, mspace, blocklen) != 0)
+	return 1;
       trace_debug ("%d bytes recorded", blocklen);
       remaining -= blocklen;
       from += blocklen;
@@ -5390,13 +5387,13 @@ traceframe_read_sdata (int tfnum, ULONGEST offset,
 }
 
 /* Callback for traceframe_walk_blocks.  Builds a traceframe-info
-   object.  DATA is pointer to a struct buffer holding the
-   traceframe-info object being built.  */
+   object.  DATA is pointer to a string holding the traceframe-info
+   object being built.  */
 
 static int
 build_traceframe_info_xml (char blocktype, unsigned char *dataptr, void *data)
 {
-  struct buffer *buffer = (struct buffer *) data;
+  std::string *buffer = (std::string *) data;
 
   switch (blocktype)
     {
@@ -5409,9 +5406,9 @@ build_traceframe_info_xml (char blocktype, unsigned char *dataptr, void *data)
 	dataptr += sizeof (maddr);
 	memcpy (&mlen, dataptr, sizeof (mlen));
 	dataptr += sizeof (mlen);
-	buffer_xml_printf (buffer,
-			   "<memory start=\"0x%s\" length=\"0x%s\"/>\n",
-			   paddress (maddr), phex_nz (mlen, sizeof (mlen)));
+	string_xml_appendf (*buffer,
+			    "<memory start=\"0x%s\" length=\"0x%s\"/>\n",
+			    paddress (maddr), phex_nz (mlen, sizeof (mlen)));
 	break;
       }
     case 'V':
@@ -5419,7 +5416,7 @@ build_traceframe_info_xml (char blocktype, unsigned char *dataptr, void *data)
 	int vnum;
 
 	memcpy (&vnum, dataptr, sizeof (vnum));
-	buffer_xml_printf (buffer, "<tvar id=\"%d\"/>\n", vnum);
+	string_xml_appendf (*buffer, "<tvar id=\"%d\"/>\n", vnum);
 	break;
       }
     case 'R':
@@ -5441,7 +5438,7 @@ build_traceframe_info_xml (char blocktype, unsigned char *dataptr, void *data)
    BUFFER.  */
 
 int
-traceframe_read_info (int tfnum, struct buffer *buffer)
+traceframe_read_info (int tfnum, std::string *buffer)
 {
   struct traceframe *tframe;
 
@@ -5455,10 +5452,10 @@ traceframe_read_info (int tfnum, struct buffer *buffer)
       return 1;
     }
 
-  buffer_grow_str (buffer, "<traceframe-info>\n");
+  *buffer += "<traceframe-info>\n";
   traceframe_walk_blocks (tframe->data, tframe->data_size,
 			  tfnum, build_traceframe_info_xml, buffer);
-  buffer_grow_str0 (buffer, "</traceframe-info>\n");
+  *buffer += "</traceframe-info>\n";
   return 0;
 }
 
@@ -6820,7 +6817,7 @@ run_inferior_command (char *cmd, int len)
   target_pause_all (false);
   uninsert_all_breakpoints ();
 
-  err = agent_run_command (pid, (const char *) cmd, len);
+  err = agent_run_command (pid, cmd, len);
 
   reinsert_all_breakpoints ();
   target_unpause_all (false);

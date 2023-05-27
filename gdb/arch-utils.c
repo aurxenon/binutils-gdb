@@ -1098,6 +1098,19 @@ default_get_return_buf_addr (struct type *val_type, frame_info_ptr cur_frame)
   return 0;
 }
 
+bool
+default_dwarf2_omit_typedef_p (struct type *target_type, const char *producer,
+			       const char *name)
+{
+  return false;
+}
+
+static CORE_ADDR
+default_update_call_site_pc (struct gdbarch *gdbarch, CORE_ADDR pc)
+{
+  return pc;
+}
+
 /* Non-zero if we want to trace architecture code.  */
 
 #ifndef GDBARCH_DEBUG
@@ -1178,8 +1191,8 @@ default_gdbarch_return_value
 
   if (read_value != nullptr)
     {
-      *read_value = allocate_value (valtype);
-      readbuf = value_contents_raw (*read_value).data ();
+      *read_value = value::allocate (valtype);
+      readbuf = (*read_value)->contents_raw ().data ();
     }
 
   return gdbarch->return_value (gdbarch, function, valtype, regcache,

@@ -2472,7 +2472,9 @@ ppc64_elf_get_synthetic_symtab (bfd *abfd,
       asection *dynamic, *glink = NULL, *relplt = NULL;
       arelent *p;
 
-      if (opd != NULL && !bfd_malloc_and_get_section (abfd, opd, &contents))
+      if (opd != NULL
+	  && ((opd->flags & SEC_HAS_CONTENTS) == 0
+	      || !bfd_malloc_and_get_section (abfd, opd, &contents)))
 	{
 	free_contents_and_exit_err:
 	  count = -1;
@@ -2507,7 +2509,8 @@ ppc64_elf_get_synthetic_symtab (bfd *abfd,
 	  size_t extdynsize;
 	  void (*swap_dyn_in) (bfd *, const void *, Elf_Internal_Dyn *);
 
-	  if (!bfd_malloc_and_get_section (abfd, dynamic, &dynbuf))
+	  if ((dynamic->flags & SEC_HAS_CONTENTS) == 0
+	      || !bfd_malloc_and_get_section (abfd, dynamic, &dynbuf))
 	    goto free_contents_and_exit_err;
 
 	  extdynsize = get_elf_backend_data (abfd)->s->sizeof_dyn;
@@ -2573,7 +2576,7 @@ ppc64_elf_get_synthetic_symtab (bfd *abfd,
 	      if (!(*slurp_relocs) (abfd, relplt, dyn_syms, true))
 		goto free_contents_and_exit_err;
 
-	      plt_count = relplt->size / sizeof (Elf64_External_Rela);
+	      plt_count = NUM_SHDR_ENTRIES (&elf_section_data (relplt)->this_hdr);
 	      size += plt_count * sizeof (asymbol);
 
 	      p = relplt->relocation;
@@ -5536,7 +5539,8 @@ opd_entry_value (asection *opd_sec,
 
       if (contents == NULL)
 	{
-	  if (!bfd_malloc_and_get_section (opd_bfd, opd_sec, &contents))
+	  if ((opd_sec->flags & SEC_HAS_CONTENTS) == 0
+	      || !bfd_malloc_and_get_section (opd_bfd, opd_sec, &contents))
 	    return (bfd_vma) -1;
 	  ppc64_elf_tdata (opd_bfd)->opd.contents = contents;
 	}
@@ -7361,7 +7365,9 @@ ppc64_elf_edit_opd (struct bfd_link_info *info)
 	continue;
 
       sec = bfd_get_section_by_name (ibfd, ".opd");
-      if (sec == NULL || sec->size == 0)
+      if (sec == NULL
+	  || sec->size == 0
+	  || (sec->flags & SEC_HAS_CONTENTS) == 0)
 	continue;
 
       if (sec->sec_info_type == SEC_INFO_TYPE_JUST_SYMS)
@@ -8922,6 +8928,7 @@ ppc64_elf_edit_toc (struct bfd_link_info *info)
       toc = bfd_get_section_by_name (ibfd, ".toc");
       if (toc == NULL
 	  || toc->size == 0
+	  || (toc->flags & SEC_HAS_CONTENTS) == 0
 	  || toc->sec_info_type == SEC_INFO_TYPE_JUST_SYMS
 	  || discarded_section (toc))
 	continue;
@@ -15313,19 +15320,19 @@ ppc64_elf_build_stubs (struct bfd_link_info *info,
     {
       char *groupmsg;
       if (asprintf (&groupmsg,
-		    ngettext ("linker stubs in %u group\n",
-			      "linker stubs in %u groups\n",
+		    ngettext ("linker stubs in %u group",
+			      "linker stubs in %u groups",
 			      stub_sec_count),
 		    stub_sec_count) < 0)
 	*stats = NULL;
       else
 	{
-	  if (asprintf (stats, _("%s"
+	  if (asprintf (stats, _("%s, iter %u\n"
 				 "  branch         %lu\n"
 				 "  long branch    %lu\n"
 				 "  plt call       %lu\n"
 				 "  global entry   %lu"),
-			groupmsg,
+			groupmsg, htab->stub_iteration,
 			htab->stub_count[ppc_stub_long_branch - 1],
 			htab->stub_count[ppc_stub_plt_branch - 1],
 			htab->stub_count[ppc_stub_plt_call - 1],

@@ -468,6 +468,7 @@ sh_elf_relax_section (bfd *abfd, asection *sec,
   *again = false;
 
   if (bfd_link_relocatable (link_info)
+      || (sec->flags & SEC_HAS_CONTENTS) == 0
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0)
     return true;
@@ -1154,6 +1155,7 @@ sh_elf_relax_delete_bytes (bfd *abfd, asection *sec, bfd_vma addr,
       bfd_byte *ocontents;
 
       if (o == sec
+	  || (o->flags & SEC_HAS_CONTENTS) == 0
 	  || (o->flags & SEC_RELOC) == 0
 	  || o->reloc_count == 0)
 	continue;
@@ -6172,6 +6174,8 @@ sh_elf_finish_dynamic_symbol (bfd *output_bfd, struct bfd_link_info *info,
 	 The entry in the global offset table will already have been
 	 initialized in the relocate_section function.  */
       if (bfd_link_pic (info)
+	  && (h->root.type == bfd_link_hash_defined
+	      || h->root.type == bfd_link_hash_defweak)
 	  && SYMBOL_REFERENCES_LOCAL (info, h))
 	{
 	  if (htab->fdpic_p)

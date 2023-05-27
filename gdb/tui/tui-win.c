@@ -36,6 +36,7 @@
 #include "gdbsupport/event-loop.h"
 #include "gdbcmd.h"
 #include "async-event.h"
+#include "utils.h"
 
 #include "tui/tui.h"
 #include "tui/tui-io.h"
@@ -299,9 +300,10 @@ tui_update_variables ()
      Only check the first one.  The ACS characters are determined at
      run time by curses terminal management.  */
   entry = translate (tui_border_kind, tui_border_kind_translate_lrcorner);
-  if (tui_border_lrcorner != (chtype) entry->value)
+  int val = (entry->value < 0) ? ACS_LRCORNER : entry->value;
+  if (tui_border_lrcorner != (chtype) val)
     {
-      tui_border_lrcorner = (entry->value < 0) ? ACS_LRCORNER : entry->value;
+      tui_border_lrcorner = val;
       need_redraw = true;
     }
   entry = translate (tui_border_kind, tui_border_kind_translate_llcorner);
@@ -528,6 +530,8 @@ tui_resize_all (void)
   int screenheight, screenwidth;
 
   rl_get_screen_size (&screenheight, &screenwidth);
+  screenwidth += readline_hidden_cols;
+
   width_diff = screenwidth - tui_term_width ();
   height_diff = screenheight - tui_term_height ();
   if (height_diff || width_diff)
@@ -576,6 +580,7 @@ tui_async_resize_screen (gdb_client_data arg)
       int screen_height, screen_width;
 
       rl_get_screen_size (&screen_height, &screen_width);
+      screen_width += readline_hidden_cols;
       set_screen_width_and_height (screen_width, screen_height);
 
       /* win_resized is left set so that the next call to tui_enable()
@@ -1111,6 +1116,10 @@ tui_window_command (const char *args, int from_tty)
   help_list (tui_window_cmds, "tui window ", all_commands, gdb_stdout);
 }
 
+/* See tui-win.h.  */
+
+bool tui_left_margin_verbose = false;
+
 /* Function to initialize gdb commands, for tui window
    manipulation.  */
 
@@ -1266,8 +1275,7 @@ When enabled GDB will print a message when the terminal is resized."),
 Set whether the TUI source window is compact."), _("\
 Show whether the TUI source window is compact."), _("\
 This variable controls whether the TUI source window is shown\n\
-in a compact form.  The compact form puts the source closer to\n\
-the line numbers and uses less horizontal space."),
+in a compact form.  The compact form uses less horizontal space."),
 			   tui_set_compact_source, tui_show_compact_source,
 			   &tui_setlist, &tui_showlist);
 
@@ -1283,6 +1291,18 @@ position indicator is styled."),
 			   show_style_tui_current_position,
 			   &style_set_list,
 			   &style_show_list);
+
+  add_setshow_boolean_cmd ("tui-left-margin-verbose", class_maintenance,
+			   &tui_left_margin_verbose, _("\
+Set whether the left margin should use '_' and '0' instead of spaces."),
+			   _("\
+Show whether the left margin should use '_' and '0' instead of spaces."),
+			   _("\
+When enabled, the left margin will use '_' and '0' instead of spaces."),
+			   nullptr,
+			   nullptr,
+			   &maintenance_set_cmdlist,
+			   &maintenance_show_cmdlist);
 
   tui_border_style.changed.attach (tui_rehighlight_all, "tui-win");
   tui_active_border_style.changed.attach (tui_rehighlight_all, "tui-win");

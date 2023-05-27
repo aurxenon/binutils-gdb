@@ -1,5 +1,15 @@
 -*- text -*-
 
+* Add support for Intel FRED instructions.
+
+* Add support for Intel LKGS instructions.
+
+* Add support for Intel AMX-COMPLEX instructions.
+
+* Add SME2 support to the AArch64 port.
+
+* A new .insn directive is recognized by x86 gas.
+
 Changes in 2.40:
 
 * Add support for Intel RAO-INT instructions.

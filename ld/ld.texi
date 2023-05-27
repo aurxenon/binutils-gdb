@@ -85,7 +85,7 @@ section entitled ``GNU Free Documentation License''.
 @tex
 {\parskip=0pt
 \hfill Red Hat Inc\par
-\hfill nickc\@credhat.com, doc\@redhat.com\par
+\hfill nickc\@redhat.com, doc\@redhat.com\par
 \hfill {\it The GNU linker}\par
 \hfill Edited by Jeffrey Osier (jeffrey\@cygnus.com)\par
 }
@@ -461,6 +461,22 @@ will contain a colon separated list of audit interfaces to use.  This
 option is only meaningful on ELF platforms supporting the rtld-audit interface.
 The -P option is provided for Solaris compatibility.
 
+@kindex --enable-linker-version
+@item   --enable-linker-version
+Enables the @code{LINKER_VERSION} linker script directive, described
+in @ref{Output Section Data}.  If this directive is used in a linker
+script and this option has been enabled then a string containing the
+linker version will be inserted at the current point.
+
+Note - this location of this option on the linker command line is
+significant.  It will only affect linker scripts that come after it on
+the command line, or which are built into the linker.
+
+@kindex --disable-linker-version
+@item   --disable-linker-version
+Disables the @code{LINKER_VERSION} linker script directive, so that it
+does not insert a version string.  This is the default.
+
 @kindex --enable-non-contiguous-regions
 @item --enable-non-contiguous-regions
 This option avoids generating an error if an input section does not
@@ -473,14 +489,14 @@ sections are evaluated does not change, for instance:
 
 @smallexample
   MEMORY @{
-    MEM1 (rwx) : ORIGIN : 0x1000, LENGTH = 0x14
-    MEM2 (rwx) : ORIGIN : 0x1000, LENGTH = 0x40
-    MEM3 (rwx) : ORIGIN : 0x2000, LENGTH = 0x40
+    MEM1 (rwx) : ORIGIN = 0x1000, LENGTH = 0x14
+    MEM2 (rwx) : ORIGIN = 0x1000, LENGTH = 0x40
+    MEM3 (rwx) : ORIGIN = 0x2000, LENGTH = 0x40
   @}
   SECTIONS @{
     mem1 : @{ *(.data.*); @} > MEM1
     mem2 : @{ *(.data.*); @} > MEM2
-    mem3 : @{ *(.data.*); @} > MEM2
+    mem3 : @{ *(.data.*); @} > MEM3
   @}
 
   with input sections:
@@ -854,6 +870,16 @@ is 0x1, and @file{bar.o}, whose 0xc0010001 property value is 0x1.
 Print (or do not print) the list of discarded and garbage collected sections
 in the link map.  Enabled by default.
 
+@kindex --print-map-locals
+@kindex --no-print-map-locals
+@item --print-map-locals
+@itemx --no-print-map-locals
+Print (or do not print) local symbols in the link map.  Local symbols
+will have the text @samp{(local)} printed before their name, and will
+be listed after all of the global symbols in a given section.
+Temporary local symbols (typically those that start with @samp{.L})
+will not be included in the output.  Disabled by default.
+
 @kindex -n
 @cindex read-only text
 @cindex NMAGIC
@@ -1059,7 +1085,8 @@ a linker bug report.
 @item -T @var{scriptfile}
 @itemx --script=@var{scriptfile}
 Use @var{scriptfile} as the linker script.  This script replaces
-@command{ld}'s default linker script (rather than adding to it), so
+@command{ld}'s default linker script (rather than adding to it),
+unless the script contains @code{INSERT}, so
 @var{commandfile} must specify everything necessary to describe the
 output file.  @xref{Scripts}.  If @var{scriptfile} does not exist in
 the current directory, @code{ld} looks for it in the directories
@@ -1112,14 +1139,18 @@ can be used multiple times to require additional symbols.
 @kindex -Ur
 @cindex constructors
 @item -Ur
-For anything other than C++ programs, this option is equivalent to
-@samp{-r}: it generates relocatable output---i.e., an output file that can in
-turn serve as input to @command{ld}.  When linking C++ programs, @samp{-Ur}
-@emph{does} resolve references to constructors, unlike @samp{-r}.
-It does not work to use @samp{-Ur} on files that were themselves linked
-with @samp{-Ur}; once the constructor table has been built, it cannot
-be added to.  Use @samp{-Ur} only for the last partial link, and
-@samp{-r} for the others.
+
+For programs that do not use constructors or destructors, or for ELF
+based systems this option is equivalent to @option{-r}:  it generates
+relocatable output---i.e., an output file that can in turn serve as
+input to @command{ld}.  For other binaries however the @option{-Ur}
+option is similar to @option{-r} but it also resolves references to
+constructors and destructors.
+
+It does not work to use @option{-Ur} on files that were themselves
+linked with @option{-Ur}; once the constructor table has been built,
+it cannot be added to.  Use @option{-Ur} only for the last partial
+link, and @option{-r} for the others.
 
 @kindex --orphan-handling=@var{MODE}
 @cindex orphan sections
@@ -1168,7 +1199,9 @@ in a linker script.
 @itemx --version
 @itemx -V
 Display the version number for @command{ld}.  The @option{-V} option also
-lists the supported emulations.
+lists the supported emulations.  See also the description of the
+@option{--enable-linker-version} in @ref{Options,,Command-line Options}
+which can be used to insert the linker version string into a binary.
 
 @kindex -x
 @kindex --discard-all
@@ -4414,6 +4447,12 @@ SECTIONS
 INSERT AFTER .text;
 @end smallexample
 
+Note that when @samp{-T} is used twice, once to override the default
+script and once to augment that script using @code{INSERT} the order
+of parsing and section assignments apply as for the default script.
+The script with @code{INSERT} should be specified @emph{first} on the
+command line.
+
 @item NOCROSSREFS(@var{section} @var{section} @dots{})
 @kindex NOCROSSREFS(@var{sections})
 @cindex cross references
@@ -5308,6 +5347,7 @@ C identifiers because they contain a @samp{.} character.
 @cindex data
 @cindex section data
 @cindex output section data
+@kindex ASCIZ ``@var{string}''
 @kindex BYTE(@var{expression})
 @kindex SHORT(@var{expression})
 @kindex LONG(@var{expression})
@@ -5344,6 +5384,18 @@ When the object file format does not have an explicit endianness, as is
 true of, for example, S-records, the value will be stored in the
 endianness of the first input object file.
 
+You can include a zero-terminated string in an output section by using
+@code{ASCIZ}.  The keyword is followed by a string which is stored at
+the current value of the location counter adding a zero byte at the
+end.  If the string includes spaces it must be enclosed in double
+quotes.  The string may contain '\n', '\r', '\t' and octal numbers.
+Hex numbers are not supported.
+
+For example, this string of 16 characters will create a 17 byte area
+@smallexample
+  ASCIZ "This is 16 bytes"
+@end smallexample
+
 Note---these commands only work inside a section description and not
 between them, so the following will produce an error from the linker:
 @smallexample
@@ -5379,6 +5431,16 @@ part of the section following the @code{FILL} command, rather than the
 entire section.  If both are used, the @code{FILL} command takes
 precedence.  @xref{Output Section Fill}, for details on the fill
 expression.
+
+@kindex LINKER_VERSION
+@cindex LINKER_VERSION
+Inserts a string containing the version of the linker at the current
+point.  Note - by default this directive is disabled and will do
+nothing.  It only becomes active if the
+@option{--enable-linker-version} command line option is used.
+
+Built-in linker scripts for ELF based targets already include this
+directive in their @samp{.comment} section.
 
 @node Output Section Keywords
 @subsection Output Section Keywords
@@ -7203,6 +7265,9 @@ support is implemented with a linker plugin.
 Currently there is only one plugin shipped by default, but more may
 be added here later.
 
+Plugins are enabled via the use of the @option{-plugin @var{name}}
+command line option. @xref{Options}.
+
 @menu
 * libdep Plugin::	Static Library Dependencies Plugin
 @end menu
@@ -8490,6 +8555,39 @@ regular static archives and are handled as any other static
 archive.  The cygwin and mingw ports of @command{ld} have specific
 support for creating such libraries provided with the
 @samp{--out-implib} command-line option.
+
+@item Resource only DLLs
+It is possible to create a DLL that only contains resources, ie just a
+@samp{.rsrc} section, but in order to do so a custom linker script
+must be used.  This is because the built-in default linker scripts
+will always create @samp{.text} and @samp{.idata} sections, even if
+there is no input to go into them.
+
+The script should look like this, although the @code{OUTPUT_FORMAT}
+should be changed to match the desired format.
+
+@example
+OUTPUT_FORMAT(pei-i386)
+SECTIONS
+@{
+  . = SIZEOF_HEADERS;
+  . = ALIGN(__section_alignment__);
+  .rsrc __image_base__ + __section_alignment__ : ALIGN(4)
+  @{
+    KEEP (*(.rsrc))
+    KEEP (*(.rsrc$*))
+  @}
+  /DISCARD/ : @{ *(*) @}
+@}
+@end example
+
+With this script saved to a file called, eg @file{rsrc.ld}, a command
+line like this can be used to create the resource only DLL
+@file{rsrc.dll} from an input file called @file{rsrc.o}:
+
+@smallexample
+ld -dll --subsystem windows -e 0 -s rsrc.o -o rsrc.dll -T rsrc.ld
+@end smallexample
 
 @item   exporting DLL symbols
 @cindex exporting DLL symbols

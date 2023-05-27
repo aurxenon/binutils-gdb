@@ -1,6 +1,6 @@
 /* Handle ROCm Code Objects for GDB, the GNU Debugger.
 
-   Copyright (C) 2019-2022 Free Software Foundation, Inc.
+   Copyright (C) 2019-2023 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -425,7 +425,7 @@ rocm_bfd_iovec_open (bfd *abfd, void *inferior_void)
 	  if (errno != 0)
 	    {
 	      /* The actual message doesn't matter, the exception is caught
-	         below, transformed in a BFD error, and the message is lost.  */
+		 below, transformed in a BFD error, and the message is lost.  */
 	      error (_("Failed to parse integer."));
 	    }
 

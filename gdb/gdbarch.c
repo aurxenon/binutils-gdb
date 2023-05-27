@@ -1,4 +1,4 @@
-/* *INDENT-OFF* */ /* THIS FILE IS GENERATED -*- buffer-read-only: t -*- */
+/* THIS FILE IS GENERATED -*- buffer-read-only: t -*- */
 /* vi:set ro: */
 
 /* Dynamic architecture support for GDB, the GNU debugger.
@@ -53,15 +53,15 @@ struct gdbarch
   int long_bit = 4*TARGET_CHAR_BIT;
   int long_long_bit = 2*4*TARGET_CHAR_BIT;
   int bfloat16_bit = 2*TARGET_CHAR_BIT;
-  const struct floatformat ** bfloat16_format = 0;
+  const struct floatformat ** bfloat16_format = floatformats_bfloat16;
   int half_bit = 2*TARGET_CHAR_BIT;
-  const struct floatformat ** half_format = 0;
+  const struct floatformat ** half_format = floatformats_ieee_half;
   int float_bit = 4*TARGET_CHAR_BIT;
-  const struct floatformat ** float_format = 0;
+  const struct floatformat ** float_format = floatformats_ieee_single;
   int double_bit = 8*TARGET_CHAR_BIT;
-  const struct floatformat ** double_format = 0;
+  const struct floatformat ** double_format = floatformats_ieee_double;
   int long_double_bit = 8*TARGET_CHAR_BIT;
-  const struct floatformat ** long_double_format = 0;
+  const struct floatformat ** long_double_format = floatformats_ieee_double;
   int wchar_bit = 4*TARGET_CHAR_BIT;
   int wchar_signed = -1;
   gdbarch_floatformat_for_type_ftype *floatformat_for_type = default_floatformat_for_type;
@@ -88,7 +88,7 @@ struct gdbarch
   gdbarch_ecoff_reg_to_regnum_ftype *ecoff_reg_to_regnum = no_op_reg_to_regnum;
   gdbarch_sdb_reg_to_regnum_ftype *sdb_reg_to_regnum = no_op_reg_to_regnum;
   gdbarch_dwarf2_reg_to_regnum_ftype *dwarf2_reg_to_regnum = no_op_reg_to_regnum;
-  gdbarch_register_name_ftype *register_name = 0;
+  gdbarch_register_name_ftype *register_name = nullptr;
   gdbarch_register_type_ftype *register_type = nullptr;
   gdbarch_dummy_id_ftype *dummy_id = default_dummy_id;
   int deprecated_fp_regnum = -1;
@@ -114,13 +114,15 @@ struct gdbarch
   gdbarch_return_value_ftype *return_value = nullptr;
   gdbarch_return_value_as_value_ftype *return_value_as_value = default_gdbarch_return_value;
   gdbarch_get_return_buf_addr_ftype *get_return_buf_addr = default_get_return_buf_addr;
+  gdbarch_dwarf2_omit_typedef_p_ftype *dwarf2_omit_typedef_p = default_dwarf2_omit_typedef_p;
+  gdbarch_update_call_site_pc_ftype *update_call_site_pc = default_update_call_site_pc;
   gdbarch_return_in_first_hidden_param_p_ftype *return_in_first_hidden_param_p = default_return_in_first_hidden_param_p;
-  gdbarch_skip_prologue_ftype *skip_prologue = 0;
+  gdbarch_skip_prologue_ftype *skip_prologue = nullptr;
   gdbarch_skip_main_prologue_ftype *skip_main_prologue = nullptr;
   gdbarch_skip_entrypoint_ftype *skip_entrypoint = nullptr;
-  gdbarch_inner_than_ftype *inner_than = 0;
+  gdbarch_inner_than_ftype *inner_than = nullptr;
   gdbarch_breakpoint_from_pc_ftype *breakpoint_from_pc = default_breakpoint_from_pc;
-  gdbarch_breakpoint_kind_from_pc_ftype *breakpoint_kind_from_pc = 0;
+  gdbarch_breakpoint_kind_from_pc_ftype *breakpoint_kind_from_pc = nullptr;
   gdbarch_sw_breakpoint_from_kind_ftype *sw_breakpoint_from_kind = NULL;
   gdbarch_breakpoint_kind_from_current_state_ftype *breakpoint_kind_from_current_state = default_breakpoint_kind_from_current_state;
   gdbarch_adjust_breakpoint_address_ftype *adjust_breakpoint_address = nullptr;
@@ -151,7 +153,7 @@ struct gdbarch
   gdbarch_single_step_through_delay_ftype *single_step_through_delay = nullptr;
   gdbarch_print_insn_ftype *print_insn = default_print_insn;
   gdbarch_skip_trampoline_code_ftype *skip_trampoline_code = generic_skip_trampoline_code;
-  const struct target_so_ops * so_ops = 0;
+  const struct target_so_ops * so_ops = &solib_target_so_ops;
   gdbarch_skip_solib_resolver_ftype *skip_solib_resolver = generic_skip_solib_resolver;
   gdbarch_in_solib_return_trampoline_ftype *in_solib_return_trampoline = generic_in_solib_return_trampoline;
   gdbarch_in_indirect_branch_thunk_ftype *in_indirect_branch_thunk = default_in_indirect_branch_thunk;
@@ -192,6 +194,7 @@ struct gdbarch
   gdbarch_displaced_step_finish_ftype *displaced_step_finish = NULL;
   gdbarch_displaced_step_copy_insn_closure_by_addr_ftype *displaced_step_copy_insn_closure_by_addr = nullptr;
   gdbarch_displaced_step_restore_all_in_ptid_ftype *displaced_step_restore_all_in_ptid = nullptr;
+  ULONGEST displaced_step_buffer_length = 0;
   gdbarch_relocate_instruction_ftype *relocate_instruction = NULL;
   gdbarch_overlay_update_ftype *overlay_update = nullptr;
   gdbarch_core_read_description_ftype *core_read_description = nullptr;
@@ -296,31 +299,30 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of long_bit, invalid_p == 0 */
   /* Skip verify of long_long_bit, invalid_p == 0 */
   /* Skip verify of bfloat16_bit, invalid_p == 0 */
-  if (gdbarch->bfloat16_format == 0)
-    gdbarch->bfloat16_format = floatformats_bfloat16;
+  /* Skip verify of bfloat16_format, invalid_p == 0 */
   /* Skip verify of half_bit, invalid_p == 0 */
-  if (gdbarch->half_format == 0)
-    gdbarch->half_format = floatformats_ieee_half;
+  /* Skip verify of half_format, invalid_p == 0 */
   /* Skip verify of float_bit, invalid_p == 0 */
-  if (gdbarch->float_format == 0)
-    gdbarch->float_format = floatformats_ieee_single;
+  /* Skip verify of float_format, invalid_p == 0 */
   /* Skip verify of double_bit, invalid_p == 0 */
-  if (gdbarch->double_format == 0)
-    gdbarch->double_format = floatformats_ieee_double;
+  /* Skip verify of double_format, invalid_p == 0 */
   /* Skip verify of long_double_bit, invalid_p == 0 */
-  if (gdbarch->long_double_format == 0)
-    gdbarch->long_double_format = floatformats_ieee_double;
+  /* Skip verify of long_double_format, invalid_p == 0 */
   /* Skip verify of wchar_bit, invalid_p == 0 */
   if (gdbarch->wchar_signed == -1)
     gdbarch->wchar_signed = 1;
+  /* Skip verify of wchar_signed, invalid_p == 0 */
   /* Skip verify of floatformat_for_type, invalid_p == 0 */
   /* Skip verify of ptr_bit, invalid_p == 0 */
   if (gdbarch->addr_bit == 0)
     gdbarch->addr_bit = gdbarch_ptr_bit (gdbarch);
+  /* Skip verify of addr_bit, invalid_p == 0 */
   if (gdbarch->dwarf2_addr_size == 0)
     gdbarch->dwarf2_addr_size = gdbarch_ptr_bit (gdbarch) / TARGET_CHAR_BIT;
+  /* Skip verify of dwarf2_addr_size, invalid_p == 0 */
   if (gdbarch->char_signed == -1)
     gdbarch->char_signed = 1;
+  /* Skip verify of char_signed, invalid_p == 0 */
   /* Skip verify of read_pc, has predicate.  */
   /* Skip verify of write_pc, has predicate.  */
   /* Skip verify of virtual_frame_pointer, invalid_p == 0 */
@@ -370,6 +372,8 @@ verify_gdbarch (struct gdbarch *gdbarch)
   if ((gdbarch->return_value_as_value == default_gdbarch_return_value) == (gdbarch->return_value == nullptr))
     log.puts ("\n\treturn_value_as_value");
   /* Skip verify of get_return_buf_addr, invalid_p == 0 */
+  /* Skip verify of dwarf2_omit_typedef_p, invalid_p == 0 */
+  /* Skip verify of update_call_site_pc, invalid_p == 0 */
   /* Skip verify of return_in_first_hidden_param_p, invalid_p == 0 */
   if (gdbarch->skip_prologue == 0)
     log.puts ("\n\tskip_prologue");
@@ -410,8 +414,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of single_step_through_delay, has predicate.  */
   /* Skip verify of print_insn, invalid_p == 0 */
   /* Skip verify of skip_trampoline_code, invalid_p == 0 */
-  if (gdbarch->so_ops == 0)
-    gdbarch->so_ops = &solib_target_so_ops;
+  /* Skip verify of so_ops, invalid_p == 0 */
   /* Skip verify of skip_solib_resolver, invalid_p == 0 */
   /* Skip verify of in_solib_return_trampoline, invalid_p == 0 */
   /* Skip verify of in_indirect_branch_thunk, invalid_p == 0 */
@@ -447,12 +450,17 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of max_insn_length, has predicate.  */
   /* Skip verify of displaced_step_copy_insn, has predicate.  */
   /* Skip verify of displaced_step_hw_singlestep, invalid_p == 0 */
-  /* Skip verify of displaced_step_fixup, has predicate.  */
+  if ((gdbarch->displaced_step_copy_insn == nullptr) != (gdbarch->displaced_step_fixup == nullptr))
+    log.puts ("\n\tdisplaced_step_fixup");
   /* Skip verify of displaced_step_prepare, has predicate.  */
   if ((! gdbarch->displaced_step_finish) != (! gdbarch->displaced_step_prepare))
     log.puts ("\n\tdisplaced_step_finish");
   /* Skip verify of displaced_step_copy_insn_closure_by_addr, has predicate.  */
   /* Skip verify of displaced_step_restore_all_in_ptid, invalid_p == 0 */
+  if (gdbarch->displaced_step_buffer_length == 0)
+    gdbarch->displaced_step_buffer_length = gdbarch->max_insn_length;
+  if (gdbarch->displaced_step_buffer_length < gdbarch->max_insn_length)
+    log.puts ("\n\tdisplaced_step_buffer_length");
   /* Skip verify of relocate_instruction, has predicate.  */
   /* Skip verify of overlay_update, has predicate.  */
   /* Skip verify of core_read_description, has predicate.  */
@@ -785,6 +793,12 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
 	      "gdbarch_dump: get_return_buf_addr = <%s>\n",
 	      host_address_to_string (gdbarch->get_return_buf_addr));
   gdb_printf (file,
+	      "gdbarch_dump: dwarf2_omit_typedef_p = <%s>\n",
+	      host_address_to_string (gdbarch->dwarf2_omit_typedef_p));
+  gdb_printf (file,
+	      "gdbarch_dump: update_call_site_pc = <%s>\n",
+	      host_address_to_string (gdbarch->update_call_site_pc));
+  gdb_printf (file,
 	      "gdbarch_dump: return_in_first_hidden_param_p = <%s>\n",
 	      host_address_to_string (gdbarch->return_in_first_hidden_param_p));
   gdb_printf (file,
@@ -1088,9 +1102,6 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
 	      "gdbarch_dump: displaced_step_hw_singlestep = <%s>\n",
 	      host_address_to_string (gdbarch->displaced_step_hw_singlestep));
   gdb_printf (file,
-	      "gdbarch_dump: gdbarch_displaced_step_fixup_p() = %d\n",
-	      gdbarch_displaced_step_fixup_p (gdbarch));
-  gdb_printf (file,
 	      "gdbarch_dump: displaced_step_fixup = <%s>\n",
 	      host_address_to_string (gdbarch->displaced_step_fixup));
   gdb_printf (file,
@@ -1111,6 +1122,9 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: displaced_step_restore_all_in_ptid = <%s>\n",
 	      host_address_to_string (gdbarch->displaced_step_restore_all_in_ptid));
+  gdb_printf (file,
+	      "gdbarch_dump: displaced_step_buffer_length = %s\n",
+	      plongest (gdbarch->displaced_step_buffer_length));
   gdb_printf (file,
 	      "gdbarch_dump: gdbarch_relocate_instruction_p() = %d\n",
 	      gdbarch_relocate_instruction_p (gdbarch));
@@ -1490,6 +1504,7 @@ const struct floatformat **
 gdbarch_bfloat16_format (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
+  /* Skip verify of bfloat16_format, invalid_p == 0 */
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_bfloat16_format called\n");
   return gdbarch->bfloat16_format;
@@ -1523,6 +1538,7 @@ const struct floatformat **
 gdbarch_half_format (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
+  /* Skip verify of half_format, invalid_p == 0 */
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_half_format called\n");
   return gdbarch->half_format;
@@ -1556,6 +1572,7 @@ const struct floatformat **
 gdbarch_float_format (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
+  /* Skip verify of float_format, invalid_p == 0 */
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_float_format called\n");
   return gdbarch->float_format;
@@ -1589,6 +1606,7 @@ const struct floatformat **
 gdbarch_double_format (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
+  /* Skip verify of double_format, invalid_p == 0 */
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_double_format called\n");
   return gdbarch->double_format;
@@ -1622,6 +1640,7 @@ const struct floatformat **
 gdbarch_long_double_format (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
+  /* Skip verify of long_double_format, invalid_p == 0 */
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_long_double_format called\n");
   return gdbarch->long_double_format;
@@ -1655,7 +1674,7 @@ int
 gdbarch_wchar_signed (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
-  /* Check variable changed from pre-default.  */
+  /* Check variable changed from its initial value.  */
   gdb_assert (gdbarch->wchar_signed != -1);
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_wchar_signed called\n");
@@ -1707,7 +1726,7 @@ int
 gdbarch_addr_bit (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
-  /* Check variable changed from pre-default.  */
+  /* Check variable changed from its initial value.  */
   gdb_assert (gdbarch->addr_bit != 0);
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_addr_bit called\n");
@@ -1725,7 +1744,7 @@ int
 gdbarch_dwarf2_addr_size (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
-  /* Check variable changed from pre-default.  */
+  /* Check variable changed from its initial value.  */
   gdb_assert (gdbarch->dwarf2_addr_size != 0);
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_dwarf2_addr_size called\n");
@@ -1743,7 +1762,7 @@ int
 gdbarch_char_signed (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
-  /* Check variable changed from pre-default.  */
+  /* Check variable changed from its initial value.  */
   gdb_assert (gdbarch->char_signed != -1);
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_char_signed called\n");
@@ -1898,7 +1917,7 @@ int
 gdbarch_num_regs (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
-  /* Check variable changed from pre-default.  */
+  /* Check variable changed from its initial value.  */
   gdb_assert (gdbarch->num_regs != -1);
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_num_regs called\n");
@@ -2608,6 +2627,40 @@ set_gdbarch_get_return_buf_addr (struct gdbarch *gdbarch,
   gdbarch->get_return_buf_addr = get_return_buf_addr;
 }
 
+bool
+gdbarch_dwarf2_omit_typedef_p (struct gdbarch *gdbarch, struct type *target_type, const char *producer, const char *name)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->dwarf2_omit_typedef_p != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_dwarf2_omit_typedef_p called\n");
+  return gdbarch->dwarf2_omit_typedef_p (target_type, producer, name);
+}
+
+void
+set_gdbarch_dwarf2_omit_typedef_p (struct gdbarch *gdbarch,
+				   gdbarch_dwarf2_omit_typedef_p_ftype dwarf2_omit_typedef_p)
+{
+  gdbarch->dwarf2_omit_typedef_p = dwarf2_omit_typedef_p;
+}
+
+CORE_ADDR
+gdbarch_update_call_site_pc (struct gdbarch *gdbarch, CORE_ADDR pc)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->update_call_site_pc != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_update_call_site_pc called\n");
+  return gdbarch->update_call_site_pc (gdbarch, pc);
+}
+
+void
+set_gdbarch_update_call_site_pc (struct gdbarch *gdbarch,
+				 gdbarch_update_call_site_pc_ftype update_call_site_pc)
+{
+  gdbarch->update_call_site_pc = update_call_site_pc;
+}
+
 int
 gdbarch_return_in_first_hidden_param_p (struct gdbarch *gdbarch, struct type *type)
 {
@@ -3304,6 +3357,7 @@ const struct target_so_ops *
 gdbarch_so_ops (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
+  /* Skip verify of so_ops, invalid_p == 0 */
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_so_ops called\n");
   return gdbarch->so_ops;
@@ -3908,15 +3962,15 @@ bool
 gdbarch_gcore_bfd_target_p (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
-  return gdbarch->gcore_bfd_target != 0;
+  return gdbarch->gcore_bfd_target != NULL;
 }
 
 const char *
 gdbarch_gcore_bfd_target (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
-  /* Check variable changed from pre-default.  */
-  gdb_assert (gdbarch->gcore_bfd_target != 0);
+  /* Check predicate was used.  */
+  gdb_assert (gdbarch_gcore_bfd_target_p (gdbarch));
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_gcore_bfd_target called\n");
   return gdbarch->gcore_bfd_target;
@@ -3991,8 +4045,8 @@ ULONGEST
 gdbarch_max_insn_length (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
-  /* Check variable changed from pre-default.  */
-  gdb_assert (gdbarch->max_insn_length != 0);
+  /* Check predicate was used.  */
+  gdb_assert (gdbarch_max_insn_length_p (gdbarch));
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_max_insn_length called\n");
   return gdbarch->max_insn_length;
@@ -4046,22 +4100,14 @@ set_gdbarch_displaced_step_hw_singlestep (struct gdbarch *gdbarch,
   gdbarch->displaced_step_hw_singlestep = displaced_step_hw_singlestep;
 }
 
-bool
-gdbarch_displaced_step_fixup_p (struct gdbarch *gdbarch)
-{
-  gdb_assert (gdbarch != NULL);
-  return gdbarch->displaced_step_fixup != NULL;
-}
-
 void
-gdbarch_displaced_step_fixup (struct gdbarch *gdbarch, struct displaced_step_copy_insn_closure *closure, CORE_ADDR from, CORE_ADDR to, struct regcache *regs)
+gdbarch_displaced_step_fixup (struct gdbarch *gdbarch, struct displaced_step_copy_insn_closure *closure, CORE_ADDR from, CORE_ADDR to, struct regcache *regs, bool completed_p)
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->displaced_step_fixup != NULL);
-  /* Do not check predicate: gdbarch->displaced_step_fixup != NULL, allow call.  */
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_displaced_step_fixup called\n");
-  gdbarch->displaced_step_fixup (gdbarch, closure, from, to, regs);
+  gdbarch->displaced_step_fixup (gdbarch, closure, from, to, regs, completed_p);
 }
 
 void
@@ -4096,13 +4142,13 @@ set_gdbarch_displaced_step_prepare (struct gdbarch *gdbarch,
 }
 
 displaced_step_finish_status
-gdbarch_displaced_step_finish (struct gdbarch *gdbarch, thread_info *thread, gdb_signal sig)
+gdbarch_displaced_step_finish (struct gdbarch *gdbarch, thread_info *thread, const target_waitstatus &ws)
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->displaced_step_finish != NULL);
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_displaced_step_finish called\n");
-  return gdbarch->displaced_step_finish (gdbarch, thread, sig);
+  return gdbarch->displaced_step_finish (gdbarch, thread, ws);
 }
 
 void
@@ -4151,6 +4197,24 @@ set_gdbarch_displaced_step_restore_all_in_ptid (struct gdbarch *gdbarch,
 						gdbarch_displaced_step_restore_all_in_ptid_ftype displaced_step_restore_all_in_ptid)
 {
   gdbarch->displaced_step_restore_all_in_ptid = displaced_step_restore_all_in_ptid;
+}
+
+ULONGEST
+gdbarch_displaced_step_buffer_length (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Check variable is valid.  */
+  gdb_assert (!(gdbarch->displaced_step_buffer_length < gdbarch->max_insn_length));
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_displaced_step_buffer_length called\n");
+  return gdbarch->displaced_step_buffer_length;
+}
+
+void
+set_gdbarch_displaced_step_buffer_length (struct gdbarch *gdbarch,
+					  ULONGEST displaced_step_buffer_length)
+{
+  gdbarch->displaced_step_buffer_length = displaced_step_buffer_length;
 }
 
 bool

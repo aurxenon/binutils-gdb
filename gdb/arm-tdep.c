@@ -1846,7 +1846,6 @@ arm_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 				 target_arm_instruction_reader ());
 }
 
-/* *INDENT-OFF* */
 /* Function: thumb_scan_prologue (helper function for arm_scan_prologue)
    This function decodes a Thumb function prologue to determine:
      1) the size of the stack frame
@@ -1866,7 +1865,6 @@ arm_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
    
    The comments for thumb_skip_prolog() describe the algorithm we use
    to detect the end of the prolog.  */
-/* *INDENT-ON* */
 
 static void
 thumb_scan_prologue (struct gdbarch *gdbarch, CORE_ADDR prev_pc,
@@ -2493,9 +2491,7 @@ static const registry<bfd>::key<arm_exidx_data> arm_exidx_data_key;
 static struct obj_section *
 arm_obj_section_from_vma (struct objfile *objfile, bfd_vma vma)
 {
-  struct obj_section *osect;
-
-  ALL_OBJFILE_OSECTIONS (objfile, osect)
+  for (obj_section *osect : objfile->sections ())
     if (bfd_section_flags (osect->the_bfd_section) & SEC_ALLOC)
       {
 	bfd_vma start, size;
@@ -3117,26 +3113,34 @@ arm_exidx_unwind_sniffer (const struct frame_unwind *self,
 	  && get_frame_type (get_next_frame (this_frame)) == NORMAL_FRAME)
 	exc_valid = 1;
 
-      /* We also assume exception information is valid if we're currently
-	 blocked in a system call.  The system library is supposed to
-	 ensure this, so that e.g. pthread cancellation works.  */
-      if (arm_frame_is_thumb (this_frame))
+      /* Some syscalls keep PC pointing to the SVC instruction itself.  */
+      for (int shift = 0; shift <= 1 && !exc_valid; ++shift)
 	{
-	  ULONGEST insn;
+	  /* We also assume exception information is valid if we're currently
+	     blocked in a system call.  The system library is supposed to
+	     ensure this, so that e.g. pthread cancellation works.  */
+	  if (arm_frame_is_thumb (this_frame))
+	    {
+	      ULONGEST insn;
 
-	  if (safe_read_memory_unsigned_integer (get_frame_pc (this_frame) - 2,
-						 2, byte_order_for_code, &insn)
-	      && (insn & 0xff00) == 0xdf00 /* svc */)
-	    exc_valid = 1;
-	}
-      else
-	{
-	  ULONGEST insn;
+	      if (safe_read_memory_unsigned_integer ((get_frame_pc (this_frame)
+						      - (shift ? 2 : 0)),
+						     2, byte_order_for_code,
+						     &insn)
+		  && (insn & 0xff00) == 0xdf00 /* svc */)
+		exc_valid = 1;
+	    }
+	  else
+	    {
+	      ULONGEST insn;
 
-	  if (safe_read_memory_unsigned_integer (get_frame_pc (this_frame) - 4,
-						 4, byte_order_for_code, &insn)
-	      && (insn & 0x0f000000) == 0x0f000000 /* svc */)
-	    exc_valid = 1;
+	      if (safe_read_memory_unsigned_integer ((get_frame_pc (this_frame)
+						      - (shift ? 4 : 0)),
+						     4, byte_order_for_code,
+						     &insn)
+		  && (insn & 0x0f000000) == 0x0f000000 /* svc */)
+		exc_valid = 1;
+	    }
 	}
 	
       /* Bail out if we don't know that exception information is valid.  */
@@ -3878,7 +3882,7 @@ arm_m_exception_prev_register (frame_info_ptr this_frame,
 							  prev_regnum);
       CORE_ADDR pc = value_as_address (value);
       return frame_unwind_got_constant (this_frame, prev_regnum,
-				        UNMAKE_THUMB_ADDR (pc));
+					UNMAKE_THUMB_ADDR (pc));
     }
 
   /* The value might be one of the alternative SP, if so, use the
@@ -4518,7 +4522,7 @@ arm_vfp_cprc_sub_candidate (struct type *t,
 	  {
 	    int sub_count = 0;
 
-	    if (!field_is_static (&t->field (i)))
+	    if (!t->field (i).is_static ())
 	      sub_count = arm_vfp_cprc_sub_candidate (t->field (i).type (),
 						      base_type);
 	    if (sub_count == -1)
@@ -4635,7 +4639,7 @@ arm_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
   /* Determine the type of this function and whether the VFP ABI
      applies.  */
-  ftype = check_typedef (value_type (function));
+  ftype = check_typedef (function->type ());
   if (ftype->code () == TYPE_CODE_PTR)
     ftype = check_typedef (ftype->target_type ());
   use_vfp_abi = arm_vfp_abi_for_function (gdbarch, ftype);
@@ -4678,11 +4682,11 @@ arm_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       int vfp_base_count;
       int may_use_core_reg = 1;
 
-      arg_type = check_typedef (value_type (args[argnum]));
+      arg_type = check_typedef (args[argnum]->type ());
       len = arg_type->length ();
       target_type = arg_type->target_type ();
       typecode = arg_type->code ();
-      val = value_contents (args[argnum]).data ();
+      val = args[argnum]->contents ().data ();
 
       align = type_align (arg_type);
       /* Round alignment up to a whole number of words.  */
@@ -4906,9 +4910,12 @@ arm_ext_type (struct gdbarch *gdbarch)
   arm_gdbarch_tdep *tdep = gdbarch_tdep<arm_gdbarch_tdep> (gdbarch);
 
   if (!tdep->arm_ext_type)
-    tdep->arm_ext_type
-      = arch_float_type (gdbarch, -1, "builtin_type_arm_ext",
-			 floatformats_arm_ext);
+    {
+      type_allocator alloc (gdbarch);
+      tdep->arm_ext_type
+	= init_float_type (alloc, -1, "builtin_type_arm_ext",
+			   floatformats_arm_ext);
+    }
 
   return tdep->arm_ext_type;
 }
@@ -8650,8 +8657,32 @@ void
 arm_displaced_step_fixup (struct gdbarch *gdbarch,
 			  struct displaced_step_copy_insn_closure *dsc_,
 			  CORE_ADDR from, CORE_ADDR to,
-			  struct regcache *regs)
+			  struct regcache *regs, bool completed_p)
 {
+  /* The following block exists as a temporary measure while displaced
+     stepping is fixed architecture at a time within GDB.
+
+     In an earlier implementation of displaced stepping, if GDB thought the
+     displaced instruction had not been executed then this fix up function
+     was never called.  As a consequence, things that should be fixed by
+     this function were left in an unfixed state.
+
+     However, it's not as simple as always calling this function; this
+     function needs to be updated to decide what should be fixed up based
+     on whether the displaced step executed or not, which requires each
+     architecture to be considered individually.
+
+     Until this architecture is updated, this block replicates the old
+     behaviour; we just restore the program counter register, and leave
+     everything else unfixed.  */
+  if (!completed_p)
+    {
+      CORE_ADDR pc = regcache_read_pc (regs);
+      pc = from + (pc - to);
+      regcache_write_pc (regs, pc);
+      return;
+    }
+
   arm_displaced_step_copy_insn_closure *dsc
     = (arm_displaced_step_copy_insn_closure *) dsc_;
 
@@ -9178,7 +9209,7 @@ arm_return_value (struct gdbarch *gdbarch, struct value *function,
 		  struct value **read_value, const gdb_byte *writebuf)
 {
   arm_gdbarch_tdep *tdep = gdbarch_tdep<arm_gdbarch_tdep> (gdbarch);
-  struct type *func_type = function ? value_type (function) : NULL;
+  struct type *func_type = function ? function->type () : NULL;
   enum arm_vfp_cprc_base_type vfp_base_type;
   int vfp_base_count;
 
@@ -9192,8 +9223,8 @@ arm_return_value (struct gdbarch *gdbarch, struct value *function,
       gdb_byte *readbuf = nullptr;
       if (read_value != nullptr)
 	{
-	  *read_value = allocate_value (valtype);
-	  readbuf = value_contents_raw (*read_value).data ();
+	  *read_value = value::allocate (valtype);
+	  readbuf = (*read_value)->contents_raw ().data ();
 	}
 
       for (i = 0; i < vfp_base_count; i++)
@@ -9268,8 +9299,8 @@ arm_return_value (struct gdbarch *gdbarch, struct value *function,
 
   if (read_value != nullptr)
     {
-      *read_value = allocate_value (valtype);
-      gdb_byte *readbuf = value_contents_raw (*read_value).data ();
+      *read_value = value::allocate (valtype);
+      gdb_byte *readbuf = (*read_value)->contents_raw ().data ();
       arm_extract_return_value (valtype, regcache, readbuf);
     }
 
@@ -10664,7 +10695,9 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   /* Note: for displaced stepping, this includes the breakpoint, and one word
      of additional scratch space.  This setting isn't used for anything beside
      displaced stepping at present.  */
-  set_gdbarch_max_insn_length (gdbarch, 4 * ARM_DISPLACED_MODIFIED_INSNS);
+  set_gdbarch_displaced_step_buffer_length
+    (gdbarch, 4 * ARM_DISPLACED_MODIFIED_INSNS);
+  set_gdbarch_max_insn_length (gdbarch, 4);
 
   /* This should be low enough for everything.  */
   tdep->lowest_pc = 0x20;

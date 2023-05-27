@@ -275,6 +275,7 @@ if test "$gdb_require_amd_dbgapi" = true \
 		    [has_amd_dbgapi=yes], [has_amd_dbgapi=no])
 
   if test "$has_amd_dbgapi" = "yes"; then
+    AC_DEFINE(HAVE_AMD_DBGAPI, 1, [Define if amd-dbgapi is being linked in.])
     TARGET_OBS="$TARGET_OBS amd-dbgapi-target.o"
 
     # If --enable-targets=all was provided, use the list of all files depending
@@ -315,20 +316,6 @@ fi
 if test "x$targ_defvec" != x; then
   AC_DEFINE_UNQUOTED(DEFAULT_BFD_VEC, $targ_defvec,
     [Define to BFD's default target vector. ])
-fi
-
-# Enable MI.
-AC_ARG_ENABLE([gdbmi],
-	      [AS_HELP_STRING([--disable-gdbmi], [disable machine-interface (MI)])],
-	      [GDB_CHECK_YES_NO_VAL([$enableval], [--enable-gdbmi])],
-	      [enable_gdbmi=yes])
-if test x"$enable_gdbmi" = xyes; then
-  if test -d "$srcdir/mi"; then
-    CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_MI_OBS)"
-    CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_MI_DEPS)"
-    CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_MI_SRCS)"
-    ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_MI_CFLAGS)"
-  fi
 fi
 
 # Enable TUI.
@@ -563,28 +550,26 @@ if test x"$prefer_curses" = xyes; then
   # search /usr/local/include, if ncurses is installed in /usr/local.  A
   # default installation of ncurses on alpha*-dec-osf* will lead to such
   # a situation.
-  AC_SEARCH_LIBS(waddstr, [ncursesw ncurses cursesX curses])
-
-  if test "$ac_cv_search_waddstr" != no; then
-    curses_found=yes
-  fi
+  AC_SEARCH_LIBS(waddstr, [ncursesw ncurses cursesX curses],
+                 [curses_found=yes
+                  AC_DEFINE([HAVE_LIBCURSES], [1],
+                            [Define to 1 if curses is enabled.])
+                 ])
 fi
 
 # Check whether we should enable the TUI, but only do so if we really
 # can.
 if test x"$enable_tui" != xno; then
-  if test -d "$srcdir/tui"; then
-    if test "$curses_found" != no; then
-      CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_TUI_OBS)"
-      CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_TUI_DEPS)"
-      CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_TUI_SRCS)"
-      ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_TUI_CFLAGS)"
+  if test "$curses_found" != no; then
+    CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_TUI_OBS)"
+    CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_TUI_DEPS)"
+    CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_TUI_SRCS)"
+    ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_TUI_CFLAGS)"
+  else
+    if test x"$enable_tui" = xyes; then
+      AC_MSG_ERROR([no enhanced curses library found; disable TUI])
     else
-      if test x"$enable_tui" = xyes; then
-	AC_MSG_ERROR([no enhanced curses library found; disable TUI])
-      else
-	AC_MSG_WARN([no enhanced curses library found; disabling TUI])
-      fi
+      AC_MSG_WARN([no enhanced curses library found; disabling TUI])
     fi
   fi
 fi
@@ -643,16 +628,19 @@ if test "$with_system_readline" = yes; then
   READLINE_DEPS=
   READLINE_CFLAGS=
   READLINE_TEXI_INCFLAG=
+  READLINE_DOC_SOURCE_INCLUDES='$(READLINE_SYSTEM_DOC_INCLUDES)'
 else
   READLINE='$(READLINE_DIR)/libreadline.a'
   READLINE_DEPS='$(READLINE)'
   READLINE_CFLAGS='-I$(READLINE_SRC)/..'
   READLINE_TEXI_INCFLAG='-I $(READLINE_DIR)'
+  READLINE_DOC_SOURCE_INCLUDES='$(READLINE_INTREE_DOC_INCLUDES)'
 fi
 AC_SUBST(READLINE)
 AC_SUBST(READLINE_DEPS)
 AC_SUBST(READLINE_CFLAGS)
 AC_SUBST(READLINE_TEXI_INCFLAG)
+AC_SUBST(READLINE_DOC_SOURCE_INCLUDES)
 
 # Generate jit-reader.h
 

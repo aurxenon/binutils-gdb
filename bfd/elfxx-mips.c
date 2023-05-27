@@ -1380,18 +1380,61 @@ _bfd_mips_elf_mkobject (bfd *abfd)
 				  MIPS_ELF_DATA);
 }
 
+/* MIPS ELF uses a special find_nearest_line routine in order the
+   handle the ECOFF debugging information.  */
+
+struct mips_elf_find_line
+{
+  struct ecoff_debug_info d;
+  struct ecoff_find_line i;
+};
+
+/* Free ECOFF debugging info used by find_nearest_line.  */
+
+static void
+free_ecoff_debug (struct ecoff_debug_info *debug)
+{
+  free (debug->line);
+  free (debug->external_dnr);
+  free (debug->external_pdr);
+  free (debug->external_sym);
+  free (debug->external_opt);
+  free (debug->external_aux);
+  free (debug->ss);
+  free (debug->ssext);
+  free (debug->external_fdr);
+  free (debug->external_rfd);
+  free (debug->external_ext);
+  debug->line = NULL;
+  debug->external_dnr = NULL;
+  debug->external_pdr = NULL;
+  debug->external_sym = NULL;
+  debug->external_opt = NULL;
+  debug->external_aux = NULL;
+  debug->ss = NULL;
+  debug->ssext = NULL;
+  debug->external_fdr = NULL;
+  debug->external_rfd = NULL;
+  debug->external_ext = NULL;
+}
+
 bool
 _bfd_mips_elf_close_and_cleanup (bfd *abfd)
 {
-  struct mips_elf_obj_tdata *tdata = mips_elf_tdata (abfd);
-  if (tdata != NULL && bfd_get_format (abfd) == bfd_object)
+  if (bfd_get_format (abfd) == bfd_object)
     {
-      BFD_ASSERT (tdata->root.object_id == MIPS_ELF_DATA);
-      while (tdata->mips_hi16_list != NULL)
+      struct mips_elf_obj_tdata *tdata = mips_elf_tdata (abfd);
+      if (tdata != NULL)
 	{
-	  struct mips_hi16 *hi = tdata->mips_hi16_list;
-	  tdata->mips_hi16_list = hi->next;
-	  free (hi);
+	  BFD_ASSERT (tdata->root.object_id == MIPS_ELF_DATA);
+	  while (tdata->mips_hi16_list != NULL)
+	    {
+	      struct mips_hi16 *hi = tdata->mips_hi16_list;
+	      tdata->mips_hi16_list = hi->next;
+	      free (hi);
+	    }
+	  if (tdata->find_line_info != NULL)
+	    free_ecoff_debug (&tdata->find_line_info->d);
 	}
     }
   return _bfd_elf_close_and_cleanup (abfd);
@@ -1438,10 +1481,12 @@ _bfd_mips_elf_read_ecoff_info (bfd *abfd, asection *section,
 
   symhdr = &debug->symbolic_header;
   (*swap->swap_hdr_in) (abfd, ext_hdr, symhdr);
+  free (ext_hdr);
+  ext_hdr = NULL;
 
   /* The symbolic header contains absolute file offsets and sizes to
      read.  */
-#define READ(ptr, offset, count, size, type)				\
+#define READ(ptr, offset, count, size)					\
   do									\
     {									\
       size_t amt;							\
@@ -1455,42 +1500,30 @@ _bfd_mips_elf_read_ecoff_info (bfd *abfd, asection *section,
 	}								\
       if (bfd_seek (abfd, symhdr->offset, SEEK_SET) != 0)		\
 	goto error_return;						\
-      debug->ptr = (type) _bfd_malloc_and_read (abfd, amt, amt);	\
+      debug->ptr = _bfd_malloc_and_read (abfd, amt + 1, amt);		\
       if (debug->ptr == NULL)						\
 	goto error_return;						\
+      ((char *) debug->ptr)[amt] = 0;					\
     } while (0)
 
-  READ (line, cbLineOffset, cbLine, sizeof (unsigned char), unsigned char *);
-  READ (external_dnr, cbDnOffset, idnMax, swap->external_dnr_size, void *);
-  READ (external_pdr, cbPdOffset, ipdMax, swap->external_pdr_size, void *);
-  READ (external_sym, cbSymOffset, isymMax, swap->external_sym_size, void *);
-  READ (external_opt, cbOptOffset, ioptMax, swap->external_opt_size, void *);
-  READ (external_aux, cbAuxOffset, iauxMax, sizeof (union aux_ext),
-	union aux_ext *);
-  READ (ss, cbSsOffset, issMax, sizeof (char), char *);
-  READ (ssext, cbSsExtOffset, issExtMax, sizeof (char), char *);
-  READ (external_fdr, cbFdOffset, ifdMax, swap->external_fdr_size, void *);
-  READ (external_rfd, cbRfdOffset, crfd, swap->external_rfd_size, void *);
-  READ (external_ext, cbExtOffset, iextMax, swap->external_ext_size, void *);
+  READ (line, cbLineOffset, cbLine, sizeof (unsigned char));
+  READ (external_dnr, cbDnOffset, idnMax, swap->external_dnr_size);
+  READ (external_pdr, cbPdOffset, ipdMax, swap->external_pdr_size);
+  READ (external_sym, cbSymOffset, isymMax, swap->external_sym_size);
+  READ (external_opt, cbOptOffset, ioptMax, swap->external_opt_size);
+  READ (external_aux, cbAuxOffset, iauxMax, sizeof (union aux_ext));
+  READ (ss, cbSsOffset, issMax, sizeof (char));
+  READ (ssext, cbSsExtOffset, issExtMax, sizeof (char));
+  READ (external_fdr, cbFdOffset, ifdMax, swap->external_fdr_size);
+  READ (external_rfd, cbRfdOffset, crfd, swap->external_rfd_size);
+  READ (external_ext, cbExtOffset, iextMax, swap->external_ext_size);
 #undef READ
-
-  debug->fdr = NULL;
 
   return true;
 
  error_return:
   free (ext_hdr);
-  free (debug->line);
-  free (debug->external_dnr);
-  free (debug->external_pdr);
-  free (debug->external_sym);
-  free (debug->external_opt);
-  free (debug->external_aux);
-  free (debug->ss);
-  free (debug->ssext);
-  free (debug->external_fdr);
-  free (debug->external_rfd);
-  free (debug->external_ext);
+  free_ecoff_debug (debug);
   return false;
 }
 
@@ -2591,7 +2624,21 @@ _bfd_mips_elf_lo16_reloc (bfd *abfd, arelent *reloc_entry, asymbol *symbol,
 
   _bfd_mips_elf_reloc_unshuffle (abfd, reloc_entry->howto->type, false,
 				 location);
-  vallo = bfd_get_32 (abfd, location);
+  /* The high 16 bits of the addend are stored in the high insn, the
+     low 16 bits in the low insn, but there is a catch:  You can't
+     just concatenate the high and low parts.  The high part of the
+     addend is adjusted for the fact that the low part is sign
+     extended.  For example, an addend of 0x38000 would have 0x0004 in
+     the high part and 0x8000 (=0xff..f8000) in the low part.
+     To extract the actual addend, calculate (a)
+     ((hi & 0xffff) << 16) + ((lo & 0xffff) ^ 0x8000) - 0x8000.
+     We will be applying (symbol + addend) & 0xffff to the low insn,
+     and we want to apply (b) (symbol + addend + 0x8000) >> 16 to the
+     high insn (the +0x8000 adjusting for when the applied low part is
+     negative).  Substituting (a) into (b) and recognising that
+     (hi & 0xffff) is already in the high insn gives a high part
+     addend adjustment of (lo & 0xffff) ^ 0x8000.  */
+  vallo = (bfd_get_32 (abfd, location) & 0xffff) ^ 0x8000;
   _bfd_mips_elf_reloc_shuffle (abfd, reloc_entry->howto->type, false,
 			       location);
 
@@ -2615,9 +2662,7 @@ _bfd_mips_elf_lo16_reloc (bfd *abfd, arelent *reloc_entry, asymbol *symbol,
       else if (hi->rel.howto->type == R_MICROMIPS_GOT16)
 	hi->rel.howto = MIPS_ELF_RTYPE_TO_HOWTO (abfd, R_MICROMIPS_HI16, false);
 
-      /* VALLO is a signed 16-bit number.  Bias it by 0x8000 so that any
-	 carry or borrow will induce a change of +1 or -1 in the high part.  */
-      hi->rel.addend += (vallo + 0x8000) & 0xffff;
+      hi->rel.addend += vallo;
 
       ret = _bfd_mips_elf_generic_reloc (abfd, &hi->rel, symbol, hi->data,
 					 hi->input_section, output_bfd,
@@ -12294,9 +12339,9 @@ mips_set_isa_flags (bfd *abfd)
     {
     default:
       if (ABI_N32_P (abfd) || ABI_64_P (abfd))
-        val = E_MIPS_ARCH_3;
+        val = MIPS_DEFAULT_R6 ? E_MIPS_ARCH_64R6 : E_MIPS_ARCH_3;
       else
-        val = E_MIPS_ARCH_1;
+        val = MIPS_DEFAULT_R6 ? E_MIPS_ARCH_32R6 : E_MIPS_ARCH_1;
       break;
 
     case bfd_mach_mips3000:
@@ -13109,15 +13154,6 @@ _bfd_mips_elf_is_target_special_symbol (bfd *abfd, asymbol *sym)
   return _bfd_elf_is_local_label_name (abfd, sym->name);
 }
 
-/* MIPS ELF uses a special find_nearest_line routine in order the
-   handle the ECOFF debugging information.  */
-
-struct mips_elf_find_line
-{
-  struct ecoff_debug_info d;
-  struct ecoff_find_line i;
-};
-
 bool
 _bfd_mips_elf_find_nearest_line (bfd *abfd, asymbol **symbols,
 				 asection *section, bfd_vma offset,
@@ -13189,6 +13225,7 @@ _bfd_mips_elf_find_nearest_line (bfd *abfd, asymbol **symbols,
 	  fi->d.fdr = bfd_alloc (abfd, amt);
 	  if (fi->d.fdr == NULL)
 	    {
+	      free_ecoff_debug (&fi->d);
 	      msec->flags = origflags;
 	      return false;
 	    }
@@ -13201,13 +13238,6 @@ _bfd_mips_elf_find_nearest_line (bfd *abfd, asymbol **symbols,
 	    (*swap->swap_fdr_in) (abfd, fraw_src, fdr_ptr);
 
 	  mips_elf_tdata (abfd)->find_line_info = fi;
-
-	  /* Note that we don't bother to ever free this information.
-	     find_nearest_line is either called all the time, as in
-	     objdump -l, so the information should be saved, or it is
-	     rarely called, as in ld error messages, so the memory
-	     wasted is unimportant.  Still, it would probably be a
-	     good idea for free_cached_info to throw it away.  */
 	}
 
       if (_bfd_ecoff_locate_line (abfd, section, offset, &fi->d, swap,
@@ -13975,8 +14005,9 @@ _bfd_mips_elf_relax_section (bfd *abfd, asection *sec,
      code section.  */
 
   if (bfd_link_relocatable (link_info)
-      || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0
+      || (sec->flags & SEC_RELOC) == 0
+      || (sec->flags & SEC_HAS_CONTENTS) == 0
       || (sec->flags & SEC_CODE) == 0)
     return true;
 
@@ -14505,6 +14536,16 @@ struct mips_mach_extension
   unsigned long extension, base;
 };
 
+/* An array that maps 64-bit architectures to the corresponding 32-bit
+   architectures.  */
+static const struct mips_mach_extension mips_mach_32_64[] =
+{
+  { bfd_mach_mipsisa64r6, bfd_mach_mipsisa32r6 },
+  { bfd_mach_mipsisa64r5, bfd_mach_mipsisa32r5 },
+  { bfd_mach_mipsisa64r3, bfd_mach_mipsisa32r3 },
+  { bfd_mach_mipsisa64r2, bfd_mach_mipsisa32r2 },
+  { bfd_mach_mipsisa64,   bfd_mach_mipsisa32 }
+};
 
 /* An array describing how BFD machines relate to one another.  The entries
    are ordered topologically with MIPS I extensions listed last.  */
@@ -14582,29 +14623,37 @@ static const struct mips_mach_extension mips_mach_extensions[] =
   { bfd_mach_mips3900, bfd_mach_mips3000 }
 };
 
-/* Return true if bfd machine EXTENSION is an extension of machine BASE.  */
+/* Return true if bfd machine EXTENSION is the same as BASE, or if
+   EXTENSION is the 64-bit equivalent of a 32-bit BASE.  */
 
 static bool
-mips_mach_extends_p (unsigned long base, unsigned long extension)
+mips_mach_extends_32_64 (unsigned long base, unsigned long extension)
 {
   size_t i;
 
   if (extension == base)
     return true;
 
-  if (base == bfd_mach_mipsisa32
-      && mips_mach_extends_p (bfd_mach_mipsisa64, extension))
-    return true;
+  for (i = 0; i < ARRAY_SIZE (mips_mach_32_64); i++)
+    if (extension == mips_mach_32_64[i].extension)
+      return base == mips_mach_32_64[i].base;
 
-  if (base == bfd_mach_mipsisa32r2
-      && mips_mach_extends_p (bfd_mach_mipsisa64r2, extension))
+  return false;
+}
+
+static bool
+mips_mach_extends_p (unsigned long base, unsigned long extension)
+{
+  size_t i;
+
+  if (mips_mach_extends_32_64 (base, extension))
     return true;
 
   for (i = 0; i < ARRAY_SIZE (mips_mach_extensions); i++)
     if (extension == mips_mach_extensions[i].extension)
       {
 	extension = mips_mach_extensions[i].base;
-	if (extension == base)
+	if (mips_mach_extends_32_64 (base, extension))
 	  return true;
       }
 
@@ -15078,7 +15127,10 @@ _bfd_mips_elf_final_link (bfd *abfd, struct bfd_link_info *info)
 	      if (! (bfd_ecoff_debug_accumulate
 		     (mdebug_handle, abfd, &debug, swap, input_bfd,
 		      &input_debug, input_swap, info)))
-		return false;
+		{
+		  free_ecoff_debug (&input_debug);
+		  return false;
+		}
 
 	      /* Loop through the external symbols.  For each one with
 		 interesting information, try to find the symbol in
@@ -15119,17 +15171,7 @@ _bfd_mips_elf_final_link (bfd *abfd, struct bfd_link_info *info)
 		}
 
 	      /* Free up the information we just read.  */
-	      free (input_debug.line);
-	      free (input_debug.external_dnr);
-	      free (input_debug.external_pdr);
-	      free (input_debug.external_sym);
-	      free (input_debug.external_opt);
-	      free (input_debug.external_aux);
-	      free (input_debug.ss);
-	      free (input_debug.ssext);
-	      free (input_debug.external_fdr);
-	      free (input_debug.external_rfd);
-	      free (input_debug.external_ext);
+	      free_ecoff_debug (&input_debug);
 
 	      /* Hack: reset the SEC_HAS_CONTENTS flag so that
 		 elf_link_input_bfd ignores this section.  */
@@ -16572,7 +16614,7 @@ _bfd_mips_elf_get_synthetic_symtab (bfd *abfd,
     return 0;
 
   plt = bfd_get_section_by_name (abfd, ".plt");
-  if (plt == NULL)
+  if (plt == NULL || (plt->flags & SEC_HAS_CONTENTS) == 0)
     return 0;
 
   slurp_relocs = get_elf_backend_data (abfd)->s->slurp_reloc_table;
@@ -16583,7 +16625,7 @@ _bfd_mips_elf_get_synthetic_symtab (bfd *abfd,
   /* Calculating the exact amount of space required for symbols would
      require two passes over the PLT, so just pessimise assuming two
      PLT slots per relocation.  */
-  count = relplt->size / hdr->sh_entsize;
+  count = NUM_SHDR_ENTRIES (hdr);
   counti = count * bed->s->int_rels_per_ext_rel;
   size = 2 * count * sizeof (asymbol);
   size += count * (sizeof (mipssuffix) +

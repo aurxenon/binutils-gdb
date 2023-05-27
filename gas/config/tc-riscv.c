@@ -171,6 +171,8 @@ static enum float_abi float_abi = FLOAT_ABI_DEFAULT;
 
 static unsigned elf_flags = 0;
 
+static bool probing_insn_operands;
+
 /* Set the default_isa_spec.  Return 0 if the spec isn't supported.
    Otherwise, return 1.  */
 
@@ -1362,7 +1364,6 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	case 'j': used_bits |= ENCODE_ITYPE_IMM (-1U); break;
 	case 'a': used_bits |= ENCODE_JTYPE_IMM (-1U); break;
 	case 'p': used_bits |= ENCODE_BTYPE_IMM (-1U); break;
-	case 'f': /* Fall through.  */
 	case 'q': used_bits |= ENCODE_STYPE_IMM (-1U); break;
 	case 'u': used_bits |= ENCODE_UTYPE_IMM (-1U); break;
 	case 'z': break; /* Zero immediate.  */
@@ -1387,6 +1388,21 @@ validate_riscv_insn (const struct riscv_opcode *opc, int length)
 	      case '2': USE_BITS (OP_MASK_OP2, OP_SH_OP2); break;
 	      default:
 		goto unknown_validate_operand;
+	    }
+	  break;
+	case 'W': /* Various operands.  */
+	  switch (*++oparg)
+	    {
+	    case 'i':
+	      switch (*++oparg)
+		{
+		case 'f': used_bits |= ENCODE_STYPE_IMM (-1U); break;
+		default:
+		  goto unknown_validate_operand;
+		}
+	      break;
+	    default:
+	      goto unknown_validate_operand;
 	    }
 	  break;
 	case 'X': /* Integer immediate.  */
@@ -2135,34 +2151,34 @@ macro (struct riscv_cl_insn *ip, expressionS *imm_expr,
 
 static const struct percent_op_match percent_op_utype[] =
 {
-  {"%tprel_hi", BFD_RELOC_RISCV_TPREL_HI20},
-  {"%pcrel_hi", BFD_RELOC_RISCV_PCREL_HI20},
-  {"%got_pcrel_hi", BFD_RELOC_RISCV_GOT_HI20},
-  {"%tls_ie_pcrel_hi", BFD_RELOC_RISCV_TLS_GOT_HI20},
-  {"%tls_gd_pcrel_hi", BFD_RELOC_RISCV_TLS_GD_HI20},
-  {"%hi", BFD_RELOC_RISCV_HI20},
+  {"tprel_hi", BFD_RELOC_RISCV_TPREL_HI20},
+  {"pcrel_hi", BFD_RELOC_RISCV_PCREL_HI20},
+  {"got_pcrel_hi", BFD_RELOC_RISCV_GOT_HI20},
+  {"tls_ie_pcrel_hi", BFD_RELOC_RISCV_TLS_GOT_HI20},
+  {"tls_gd_pcrel_hi", BFD_RELOC_RISCV_TLS_GD_HI20},
+  {"hi", BFD_RELOC_RISCV_HI20},
   {0, 0}
 };
 
 static const struct percent_op_match percent_op_itype[] =
 {
-  {"%lo", BFD_RELOC_RISCV_LO12_I},
-  {"%tprel_lo", BFD_RELOC_RISCV_TPREL_LO12_I},
-  {"%pcrel_lo", BFD_RELOC_RISCV_PCREL_LO12_I},
+  {"lo", BFD_RELOC_RISCV_LO12_I},
+  {"tprel_lo", BFD_RELOC_RISCV_TPREL_LO12_I},
+  {"pcrel_lo", BFD_RELOC_RISCV_PCREL_LO12_I},
   {0, 0}
 };
 
 static const struct percent_op_match percent_op_stype[] =
 {
-  {"%lo", BFD_RELOC_RISCV_LO12_S},
-  {"%tprel_lo", BFD_RELOC_RISCV_TPREL_LO12_S},
-  {"%pcrel_lo", BFD_RELOC_RISCV_PCREL_LO12_S},
+  {"lo", BFD_RELOC_RISCV_LO12_S},
+  {"tprel_lo", BFD_RELOC_RISCV_TPREL_LO12_S},
+  {"pcrel_lo", BFD_RELOC_RISCV_PCREL_LO12_S},
   {0, 0}
 };
 
 static const struct percent_op_match percent_op_rtype[] =
 {
-  {"%tprel_add", BFD_RELOC_RISCV_TPREL_ADD},
+  {"tprel_add", BFD_RELOC_RISCV_TPREL_ADD},
   {0, 0}
 };
 
@@ -2180,14 +2196,16 @@ parse_relocation (char **str, bfd_reloc_code_real_type *reloc,
 		  const struct percent_op_match *percent_op)
 {
   for ( ; percent_op->str; percent_op++)
-    if (strncasecmp (*str, percent_op->str, strlen (percent_op->str)) == 0)
+    if (strncasecmp (*str + 1, percent_op->str, strlen (percent_op->str)) == 0)
       {
-	int len = strlen (percent_op->str);
+	size_t len = 1 + strlen (percent_op->str);
 
-	if (!ISSPACE ((*str)[len]) && (*str)[len] != '(')
+	while (ISSPACE ((*str)[len]))
+	  ++len;
+	if ((*str)[len] != '(')
 	  continue;
 
-	*str += strlen (percent_op->str);
+	*str += len;
 	*reloc = percent_op->reloc;
 
 	/* Check whether the output BFD supports this relocation.
@@ -2228,20 +2246,9 @@ my_getSmallExpression (expressionS *ep, bfd_reloc_code_real_type *reloc,
 		       char *str, const struct percent_op_match *percent_op)
 {
   size_t reloc_index;
-  unsigned crux_depth, str_depth, regno;
+  unsigned crux_depth, str_depth;
+  bool orig_probing = probing_insn_operands;
   char *crux;
-
-  /* First, check for integer registers.  No callers can accept a reg, but
-     we need to avoid accidentally creating a useless undefined symbol below,
-     if this is an instruction pattern that can't match.  A glibc build fails
-     if this is removed.  */
-  if (reg_lookup (&str, RCLASS_GPR, &regno))
-    {
-      ep->X_op = O_register;
-      ep->X_add_number = regno;
-      expr_parse_end = str;
-      return 0;
-    }
 
   /* Search for the start of the main expression.
 
@@ -2265,8 +2272,25 @@ my_getSmallExpression (expressionS *ep, bfd_reloc_code_real_type *reloc,
 	 && reloc_index < 1
 	 && parse_relocation (&str, reloc, percent_op));
 
+  if (*str == '%')
+    {
+       /* expression() will choke on anything looking like an (unrecognized)
+	  relocation specifier.  Don't even call it, avoiding multiple (and
+	  perhaps redundant) error messages; our caller will issue one.  */
+       ep->X_op = O_illegal;
+       return 0;
+    }
+
+  /* Anything inside parentheses or subject to a relocation operator cannot
+     be a register and hence can be treated the same as operands to
+     directives (other than .insn).  */
+  if (str_depth || reloc_index)
+    probing_insn_operands = false;
+
   my_getExpression (ep, crux);
   str = expr_parse_end;
+
+  probing_insn_operands = orig_probing;
 
   /* Match every open bracket.  */
   while (crux_depth > 0 && (*str == ')' || *str == ' ' || *str == '\t'))
@@ -2285,7 +2309,7 @@ my_getSmallExpression (expressionS *ep, bfd_reloc_code_real_type *reloc,
 
 static size_t
 my_getOpcodeExpression (expressionS *ep, bfd_reloc_code_real_type *reloc,
-			char *str, const struct percent_op_match *percent_op)
+			char *str)
 {
   const struct opcode_name_t *o = opcode_name_lookup (&str);
 
@@ -2296,7 +2320,7 @@ my_getOpcodeExpression (expressionS *ep, bfd_reloc_code_real_type *reloc,
       return 0;
     }
 
-  return my_getSmallExpression (ep, reloc, str, percent_op);
+  return my_getSmallExpression (ep, reloc, str, percent_op_null);
 }
 
 /* Parse string STR as a vsetvli operand.  Store the expression in *EP.
@@ -2453,6 +2477,13 @@ riscv_is_priv_insn (insn_t insn)
 	  || ((insn ^ MATCH_SFENCE_VM) & MASK_SFENCE_VM) == 0);
 }
 
+static symbolS *deferred_sym_rootP;
+static symbolS *deferred_sym_lastP;
+/* Since symbols can't easily be freed, try to recycle ones which weren't
+   committed.  */
+static symbolS *orphan_sym_rootP;
+static symbolS *orphan_sym_lastP;
+
 /* This routine assembles an instruction into its binary format.  As a
    side effect, it sets the global variable imm_reloc to the type of
    relocation to do if one of the operands is an address expression.  */
@@ -2488,6 +2519,8 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 
   insn = (struct riscv_opcode *) str_hash_find (hash, str);
 
+  probing_insn_operands = true;
+
   asargStart = asarg;
   for ( ; insn && insn->name && strcmp (insn->name, str) == 0; insn++)
     {
@@ -2504,11 +2537,22 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
       /* Reset error message of the previous round.  */
       error.msg = _("illegal operands");
       error.missing_ext = NULL;
+
+      /* Purge deferred symbols from the previous round, if any.  */
+      while (deferred_sym_rootP)
+	{
+	  symbolS *sym = deferred_sym_rootP;
+
+	  symbol_remove (sym, &deferred_sym_rootP, &deferred_sym_lastP);
+	  symbol_append (sym, orphan_sym_lastP, &orphan_sym_rootP,
+			 &orphan_sym_lastP);
+	}
+
       create_insn (ip, insn);
 
       imm_expr->X_op = O_absent;
       *imm_reloc = BFD_RELOC_UNUSED;
-      p = percent_op_itype;
+      p = percent_op_null;
 
       for (oparg = insn->args;; ++oparg)
 	{
@@ -2558,9 +2602,22 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		}
 	      if (*asarg != '\0')
 		break;
+
 	      /* Successful assembly.  */
 	      error.msg = NULL;
 	      insn_with_csr = false;
+
+	      /* Commit deferred symbols, if any.  */
+	      while (deferred_sym_rootP)
+		{
+		  symbolS *sym = deferred_sym_rootP;
+
+		  symbol_remove (sym, &deferred_sym_rootP,
+				 &deferred_sym_lastP);
+		  symbol_append (sym, symbol_lastP, &symbol_rootP,
+				 &symbol_lastP);
+		  symbol_table_insert (sym);
+		}
 	      goto out;
 
 	    case 'C': /* RVC */
@@ -2764,8 +2821,6 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		case 'p':
 		  goto branch;
 		case 'a':
-		  if (oparg == insn->args + 1)
-		    goto jump_check_gpr;
 		  goto jump;
 		case 'S': /* Floating-point RS1 x8-x15.  */
 		  if (!reg_lookup (&asarg, RCLASS_FPR, &regno)
@@ -3224,7 +3279,6 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	      p = percent_op_rtype;
 	      goto alu_op;
 	    case '0': /* AMO displacement, which must be zero.  */
-	      p = percent_op_null;
 	    load_store:
 	      if (riscv_handle_implicit_zero_offset (imm_expr, asarg))
 		continue;
@@ -3270,18 +3324,6 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	      continue;
 
 	    case 'a': /* 20-bit PC-relative offset.  */
-	      /* Like in my_getSmallExpression() we need to avoid emitting
-		 a stray undefined symbol if the 1st JAL entry doesn't match,
-		 but the 2nd (with 2 operands) might.  */
-	      if (oparg == insn->args)
-		{
-	    jump_check_gpr:
-		  asargStart = asarg;
-		  if (reg_lookup (&asarg, RCLASS_GPR, NULL)
-		      && (*asarg == ',' || (ISSPACE (*asarg) && asarg[1] == ',')))
-		    break;
-		  asarg = asargStart;
-		}
 	    jump:
 	      my_getExpression (imm_expr, asarg);
 	      asarg = expr_parse_end;
@@ -3300,7 +3342,7 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	      switch (*++oparg)
 		{
 		case '4':
-		  if (my_getOpcodeExpression (imm_expr, imm_reloc, asarg, p)
+		  if (my_getOpcodeExpression (imm_expr, imm_reloc, asarg)
 		      || imm_expr->X_op != O_constant
 		      || imm_expr->X_add_number < 0
 		      || imm_expr->X_add_number >= 128
@@ -3317,7 +3359,7 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		  continue;
 
 		case '2':
-		  if (my_getOpcodeExpression (imm_expr, imm_reloc, asarg, p)
+		  if (my_getOpcodeExpression (imm_expr, imm_reloc, asarg)
 		      || imm_expr->X_op != O_constant
 		      || imm_expr->X_add_number < 0
 		      || imm_expr->X_add_number >= 3)
@@ -3420,22 +3462,37 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 	      imm_expr->X_op = O_absent;
 	      continue;
 
-	    case 'f': /* Prefetch offset, pseudo S-type but lower 5-bits zero.  */
-	      if (riscv_handle_implicit_zero_offset (imm_expr, asarg))
-		continue;
-	      my_getExpression (imm_expr, asarg);
-	      check_absolute_expr (ip, imm_expr, false);
-	      if (((unsigned) (imm_expr->X_add_number) & 0x1fU)
-		  || imm_expr->X_add_number >= (signed) RISCV_IMM_REACH / 2
-		  || imm_expr->X_add_number < -(signed) RISCV_IMM_REACH / 2)
-		as_bad (_("improper prefetch offset (%ld)"),
-			(long) imm_expr->X_add_number);
-	      ip->insn_opcode |=
-		ENCODE_STYPE_IMM ((unsigned) (imm_expr->X_add_number) &
-				  ~ 0x1fU);
-	      imm_expr->X_op = O_absent;
-	      asarg = expr_parse_end;
-	      continue;
+	    case 'W': /* Various operands.  */
+	      switch (*++oparg)
+		{
+		case 'i':
+		  switch (*++oparg)
+		    {
+		    case 'f':
+		      /* Prefetch offset for 'Zicbop' extension.
+			 pseudo S-type but lower 5-bits zero.  */
+		      if (riscv_handle_implicit_zero_offset (imm_expr, asarg))
+			continue;
+		      my_getExpression (imm_expr, asarg);
+		      check_absolute_expr (ip, imm_expr, false);
+		      if (((unsigned) (imm_expr->X_add_number) & 0x1fU)
+			  || imm_expr->X_add_number >= RISCV_IMM_REACH / 2
+			  || imm_expr->X_add_number < -RISCV_IMM_REACH / 2)
+			as_bad (_ ("improper prefetch offset (%ld)"),
+				(long) imm_expr->X_add_number);
+		      ip->insn_opcode |= ENCODE_STYPE_IMM (
+			  (unsigned) (imm_expr->X_add_number) & ~0x1fU);
+		      imm_expr->X_op = O_absent;
+		      asarg = expr_parse_end;
+		      continue;
+		    default:
+		      goto unknown_riscv_ip_operand;
+		    }
+		  break;
+		default:
+		  goto unknown_riscv_ip_operand;
+		}
+	      break;
 
 	    case 'X': /* Integer immediate.  */
 	      {
@@ -3488,6 +3545,7 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
 		  }
 	      }
 	      break;
+
 	    default:
 	    unknown_riscv_ip_operand:
 	      as_fatal (_("internal: unknown argument type `%s'"),
@@ -3503,6 +3561,8 @@ riscv_ip (char *str, struct riscv_cl_insn *ip, expressionS *imm_expr,
   /* Restore the character we might have clobbered above.  */
   if (save_c)
     *(asargStart  - 1) = save_c;
+
+  probing_insn_operands = false;
 
   return error;
 }
@@ -3800,6 +3860,53 @@ riscv_after_parse_args (void)
     flag_dwarf_cie_version = 3;
 }
 
+bool riscv_parse_name (const char *name, struct expressionS *ep,
+		       enum expr_mode mode)
+{
+  unsigned int regno;
+  symbolS *sym;
+
+  if (!probing_insn_operands)
+    return false;
+
+  gas_assert (mode == expr_normal);
+
+  regno = reg_lookup_internal (name, RCLASS_GPR);
+  if (regno == (unsigned int)-1)
+    return false;
+
+  if (symbol_find (name) != NULL)
+    return false;
+
+  /* Create a symbol without adding it to the symbol table yet.
+     Insertion will happen only once we commit to using the insn
+     we're probing operands for.  */
+  for (sym = deferred_sym_rootP; sym; sym = symbol_next (sym))
+    if (strcmp (name, S_GET_NAME (sym)) == 0)
+      break;
+  if (!sym)
+    {
+      for (sym = orphan_sym_rootP; sym; sym = symbol_next (sym))
+	if (strcmp (name, S_GET_NAME (sym)) == 0)
+	  {
+	    symbol_remove (sym, &orphan_sym_rootP, &orphan_sym_lastP);
+	    break;
+	  }
+      if (!sym)
+	sym = symbol_create (name, undefined_section,
+			     &zero_address_frag, 0);
+
+      symbol_append (sym, deferred_sym_lastP, &deferred_sym_rootP,
+		     &deferred_sym_lastP);
+    }
+
+  ep->X_op = O_symbol;
+  ep->X_add_symbol = sym;
+  ep->X_add_number = 0;
+
+  return true;
+}
+
 long
 md_pcrel_from (fixS *fixP)
 {
@@ -3843,6 +3950,9 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
     case BFD_RELOC_RISCV_SUB32:
     case BFD_RELOC_RISCV_SUB64:
     case BFD_RELOC_RISCV_RELAX:
+    /* cvt_frag_to_fill () has called output_leb128 ().  */
+    case BFD_RELOC_RISCV_SET_ULEB128:
+    case BFD_RELOC_RISCV_SUB_ULEB128:
       break;
 
     case BFD_RELOC_RISCV_TPREL_HI20:
@@ -4179,7 +4289,7 @@ s_riscv_option (int x ATTRIBUTE_UNUSED)
     }
   else
     {
-      as_warn (_("unrecognized .option directive: %s\n"), name);
+      as_warn (_("unrecognized .option directive: %s"), name);
     }
   *input_line_pointer = ch;
   demand_empty_rest_of_line ();
@@ -4607,8 +4717,11 @@ s_riscv_leb128 (int sign)
   char *save_in = input_line_pointer;
 
   expression (&exp);
-  if (exp.X_op != O_constant)
-    as_bad (_("non-constant .%cleb128 is not supported"), sign ? 's' : 'u');
+  if (sign && exp.X_op != O_constant)
+    as_bad (_("non-constant .sleb128 is not supported"));
+  else if (!sign && exp.X_op != O_constant && exp.X_op != O_subtract)
+    as_bad (_(".uleb128 only supports constant or subtract expressions"));
+
   demand_empty_rest_of_line ();
 
   input_line_pointer = save_in;
@@ -4728,12 +4841,58 @@ riscv_set_public_attributes (void)
     riscv_write_out_attrs ();
 }
 
+/* Scan uleb128 subtraction expressions and insert fixups for them.
+   e.g., .uleb128 .L1 - .L0
+   Because relaxation may change the value of the subtraction, we
+   must resolve them at link-time.  */
+
+static void
+riscv_insert_uleb128_fixes (bfd *abfd ATTRIBUTE_UNUSED,
+			    asection *sec, void *xxx ATTRIBUTE_UNUSED)
+{
+  segment_info_type *seginfo = seg_info (sec);
+  struct frag *fragP;
+
+  subseg_set (sec, 0);
+
+  for (fragP = seginfo->frchainP->frch_root;
+       fragP; fragP = fragP->fr_next)
+    {
+      expressionS *exp, *exp_dup;
+
+      if (fragP->fr_type != rs_leb128  || fragP->fr_symbol == NULL)
+	continue;
+
+      exp = symbol_get_value_expression (fragP->fr_symbol);
+
+      if (exp->X_op != O_subtract)
+	continue;
+
+      /* Only unsigned leb128 can be handled.  */
+      gas_assert (fragP->fr_subtype == 0);
+      exp_dup = xmemdup (exp, sizeof (*exp), sizeof (*exp));
+      exp_dup->X_op = O_symbol;
+      exp_dup->X_op_symbol = NULL;
+
+      /* Insert relocations to resolve the subtraction at link-time.
+	 Emit the SET relocation first in riscv.  */
+      exp_dup->X_add_symbol = exp->X_add_symbol;
+      fix_new_exp (fragP, fragP->fr_fix, 0,
+		   exp_dup, 0, BFD_RELOC_RISCV_SET_ULEB128);
+      exp_dup->X_add_symbol = exp->X_op_symbol;
+      fix_new_exp (fragP, fragP->fr_fix, 0,
+		   exp_dup, 0, BFD_RELOC_RISCV_SUB_ULEB128);
+    }
+}
+
 /* Called after all assembly has been done.  */
 
 void
 riscv_md_finish (void)
 {
   riscv_set_public_attributes ();
+  if (riscv_opts.relax)
+    bfd_map_over_sections (stdoutput, riscv_insert_uleb128_fixes, NULL);
 }
 
 /* Adjust the symbol table.  */

@@ -1,6 +1,6 @@
 /* Target-dependent code for the AMDGPU architectures.
 
-   Copyright (C) 2019-2022 Free Software Foundation, Inc.
+   Copyright (C) 2019-2023 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -49,6 +49,16 @@ amdgpu_gdbarch_tdep *
 get_amdgpu_gdbarch_tdep (gdbarch *arch)
 {
   return gdbarch_tdep<amdgpu_gdbarch_tdep> (arch);
+}
+
+/* Dummy implementation of gdbarch_return_value_as_value.  */
+
+static return_value_convention
+amdgpu_return_value_as_value (gdbarch *arch, value *function, type *valtype,
+			      regcache *regcache, value **read_value,
+			      const gdb_byte *writebuf)
+{
+  gdb_assert_not_reached ("not implemented");
 }
 
 /* Return the name of register REGNUM.  */
@@ -664,7 +674,8 @@ amd_dbgapi_register_type_to_gdb_type (const amd_dbgapi_register_type &type,
     case amd_dbgapi_register_type::kind::INTEGER:
       {
 	const auto &integer_type
-	  = static_cast<const amd_dbgapi_register_type_integer &> (type);
+	  = gdb::checked_static_cast<const amd_dbgapi_register_type_integer &>
+	      (type);
 	switch (integer_type.bit_size ())
 	  {
 	  case 32:
@@ -687,7 +698,8 @@ amd_dbgapi_register_type_to_gdb_type (const amd_dbgapi_register_type &type,
     case amd_dbgapi_register_type::kind::VECTOR:
       {
 	const auto &vector_type
-	  = static_cast<const amd_dbgapi_register_type_vector &> (type);
+	  = gdb::checked_static_cast<const amd_dbgapi_register_type_vector &>
+	      (type);
 	struct type *element_type
 	  = amd_dbgapi_register_type_to_gdb_type (vector_type.element_type (),
 						  gdbarch);
@@ -706,7 +718,8 @@ amd_dbgapi_register_type_to_gdb_type (const amd_dbgapi_register_type &type,
     case amd_dbgapi_register_type::kind::FLAGS:
       {
 	const auto &flags_type
-	  = static_cast<const amd_dbgapi_register_type_flags &> (type);
+	  = gdb::checked_static_cast<const amd_dbgapi_register_type_flags &>
+	      (type);
 	struct type *gdb_type
 	  = arch_flags_type (gdbarch, flags_type.name ().c_str (),
 			     flags_type.bit_size ());
@@ -737,10 +750,12 @@ amd_dbgapi_register_type_to_gdb_type (const amd_dbgapi_register_type &type,
     case amd_dbgapi_register_type::kind::ENUM:
       {
 	const auto &enum_type
-	  = static_cast<const amd_dbgapi_register_type_enum &> (type);
+	  = gdb::checked_static_cast<const amd_dbgapi_register_type_enum &>
+	      (type);
 	struct type *gdb_type
-	  = arch_type (gdbarch, TYPE_CODE_ENUM, enum_type.bit_size (),
-		       enum_type.name ().c_str ());
+	  = (type_allocator (gdbarch)
+	     .new_type (TYPE_CODE_ENUM, enum_type.bit_size (),
+			enum_type.name ().c_str ()));
 
 	gdb_type->set_num_fields (enum_type.size ());
 	gdb_type->set_fields
@@ -1195,6 +1210,8 @@ amdgpu_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, amdgpu_dwarf_reg_to_regnum);
 
+  set_gdbarch_return_value_as_value (gdbarch, amdgpu_return_value_as_value);
+
   /* Register representation.  */
   set_gdbarch_register_name (gdbarch, amdgpu_register_name);
   set_gdbarch_register_type (gdbarch, amdgpu_register_type);
@@ -1297,7 +1314,8 @@ amdgpu_register_type_parse_test ()
 
     gdb_assert (type.kind () == amd_dbgapi_register_type::kind::FLAGS);
 
-    const auto &f = static_cast<const amd_dbgapi_register_type_flags &> (type);
+    const auto &f
+      = gdb::checked_static_cast<const amd_dbgapi_register_type_flags &> (type);
     gdb_assert (f.size () == 23);
 
     /* Check the two "FP_ROUND" fields.  */
@@ -1309,7 +1327,8 @@ amdgpu_register_type_parse_test ()
 		      == amd_dbgapi_register_type::kind::ENUM);
 
 	  const auto &e
-	    = static_cast<const amd_dbgapi_register_type_enum &> (*field.type);
+	    = gdb::checked_static_cast<const amd_dbgapi_register_type_enum &>
+	      (*field.type);
 	  gdb_assert (e.size () == 4);
 	  gdb_assert (e[0].name == "NEAREST_EVEN");
 	  gdb_assert (e[0].value == 0);
@@ -1325,7 +1344,8 @@ amdgpu_register_type_parse_test ()
     gdb_assert (f[22].type->kind () == amd_dbgapi_register_type::kind::INTEGER);
 
     const auto &i
-      = static_cast<const amd_dbgapi_register_type_integer &> (*f[22].type);
+      = gdb::checked_static_cast<const amd_dbgapi_register_type_integer &>
+	  (*f[22].type);
     gdb_assert (i.bit_size () == 32);
     gdb_assert (i.is_unsigned ());
   }
@@ -1339,13 +1359,16 @@ amdgpu_register_type_parse_test ()
 
     gdb_assert (type.kind () == amd_dbgapi_register_type::kind::VECTOR);
 
-    const auto &v = static_cast<const amd_dbgapi_register_type_vector &> (type);
+    const auto &v
+      = gdb::checked_static_cast<const amd_dbgapi_register_type_vector &>
+	  (type);
     gdb_assert (v.count () == 64);
 
     const auto &et = v.element_type ();
     gdb_assert (et.kind () == amd_dbgapi_register_type::kind::INTEGER);
 
-    const auto &i = static_cast<const amd_dbgapi_register_type_integer &> (et);
+    const auto &i
+      = gdb::checked_static_cast<const amd_dbgapi_register_type_integer &> (et);
     gdb_assert (i.bit_size () == 32);
     gdb_assert (!i.is_unsigned ());
   }

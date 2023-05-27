@@ -102,9 +102,12 @@ m68881_ext_type (struct gdbarch *gdbarch)
   m68k_gdbarch_tdep *tdep = gdbarch_tdep<m68k_gdbarch_tdep> (gdbarch);
 
   if (!tdep->m68881_ext_type)
-    tdep->m68881_ext_type
-      = arch_float_type (gdbarch, -1, "builtin_type_m68881_ext",
-			 floatformats_m68881_ext);
+    {
+      type_allocator alloc (gdbarch);
+      tdep->m68881_ext_type
+	= init_float_type (alloc, -1, "builtin_type_m68881_ext",
+			   floatformats_m68881_ext);
+    }
 
   return tdep->m68881_ext_type;
 }
@@ -544,7 +547,7 @@ m68k_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   /* Push arguments in reverse order.  */
   for (i = nargs - 1; i >= 0; i--)
     {
-      struct type *value_type = value_enclosing_type (args[i]);
+      struct type *value_type = args[i]->enclosing_type ();
       int len = value_type->length ();
       int container_len = (len + 3) & ~3;
       int offset;
@@ -559,7 +562,7 @@ m68k_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       else
 	offset = container_len - len;
       sp -= container_len;
-      write_memory (sp + offset, value_contents_all (args[i]).data (), len);
+      write_memory (sp + offset, args[i]->contents_all ().data (), len);
     }
 
   /* Store struct value address.  */

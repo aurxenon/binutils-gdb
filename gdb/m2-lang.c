@@ -42,7 +42,7 @@ eval_op_m2_high (struct type *expect_type, struct expression *exp,
   else
     {
       arg1 = coerce_ref (arg1);
-      struct type *type = check_typedef (value_type (arg1));
+      struct type *type = check_typedef (arg1->type ());
 
       if (m2_is_unbounded_array (type))
 	{
@@ -54,7 +54,7 @@ eval_op_m2_high (struct type *expect_type, struct expression *exp,
 				   _("unbounded structure "
 				     "missing _m2_high field"));
 
-	  if (value_type (arg1) != type)
+	  if (arg1->type () != type)
 	    arg1 = value_cast (type, arg1);
 	}
     }
@@ -73,7 +73,7 @@ eval_op_m2_subscript (struct type *expect_type, struct expression *exp,
      then report this as an error.  */
 
   arg1 = coerce_ref (arg1);
-  struct type *type = check_typedef (value_type (arg1));
+  struct type *type = check_typedef (arg1->type ());
 
   if (m2_is_unbounded_array (type))
     {
@@ -87,10 +87,10 @@ eval_op_m2_subscript (struct type *expect_type, struct expression *exp,
 			       _("unbounded structure "
 				 "missing _m2_contents field"));
 	  
-      if (value_type (arg1) != type)
+      if (arg1->type () != type)
 	arg1 = value_cast (type, arg1);
 
-      check_typedef (value_type (arg1));
+      check_typedef (arg1->type ());
       return value_ind (value_ptradd (arg1, value_as_long (arg2)));
     }
   else
@@ -104,7 +104,7 @@ eval_op_m2_subscript (struct type *expect_type, struct expression *exp,
       }
 
   if (noside == EVAL_AVOID_SIDE_EFFECTS)
-    return value_zero (type->target_type (), VALUE_LVAL (arg1));
+    return value::zero (type->target_type (), arg1->lval ());
   else
     return value_subscript (arg1, value_as_long (arg2));
 }
@@ -281,18 +281,20 @@ build_m2_types (struct gdbarch *gdbarch)
 {
   struct builtin_m2_type *builtin_m2_type = new struct builtin_m2_type;
 
+  type_allocator alloc (gdbarch);
+
   /* Modula-2 "pervasive" types.  NOTE:  these can be redefined!!! */
   builtin_m2_type->builtin_int
-    = arch_integer_type (gdbarch, gdbarch_int_bit (gdbarch), 0, "INTEGER");
+    = init_integer_type (alloc, gdbarch_int_bit (gdbarch), 0, "INTEGER");
   builtin_m2_type->builtin_card
-    = arch_integer_type (gdbarch, gdbarch_int_bit (gdbarch), 1, "CARDINAL");
+    = init_integer_type (alloc, gdbarch_int_bit (gdbarch), 1, "CARDINAL");
   builtin_m2_type->builtin_real
-    = arch_float_type (gdbarch, gdbarch_float_bit (gdbarch), "REAL",
+    = init_float_type (alloc, gdbarch_float_bit (gdbarch), "REAL",
 		       gdbarch_float_format (gdbarch));
   builtin_m2_type->builtin_char
-    = arch_character_type (gdbarch, TARGET_CHAR_BIT, 1, "CHAR");
+    = init_character_type (alloc, TARGET_CHAR_BIT, 1, "CHAR");
   builtin_m2_type->builtin_bool
-    = arch_boolean_type (gdbarch, gdbarch_int_bit (gdbarch), 1, "BOOLEAN");
+    = init_boolean_type (alloc, gdbarch_int_bit (gdbarch), 1, "BOOLEAN");
 
   return builtin_m2_type;
 }

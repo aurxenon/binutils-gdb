@@ -1298,8 +1298,8 @@ avr_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
       int last_regnum;
       int j;
       struct value *arg = args[i];
-      struct type *type = check_typedef (value_type (arg));
-      const bfd_byte *contents = value_contents (arg).data ();
+      struct type *type = check_typedef (arg->type ());
+      const bfd_byte *contents = arg->contents ().data ();
       int len = type->length ();
 
       /* Calculate the potential last register needed.
@@ -1473,10 +1473,10 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Create a type for PC.  We can't use builtin types here, as they may not
      be defined.  */
-  tdep->void_type = arch_type (gdbarch, TYPE_CODE_VOID, TARGET_CHAR_BIT,
-			       "void");
+  type_allocator alloc (gdbarch);
+  tdep->void_type = alloc.new_type (TYPE_CODE_VOID, TARGET_CHAR_BIT, "void");
   tdep->func_void_type = make_function_type (tdep->void_type, NULL);
-  tdep->pc_type = arch_pointer_type (gdbarch, 4 * TARGET_CHAR_BIT, NULL,
+  tdep->pc_type = init_pointer_type (alloc, 4 * TARGET_CHAR_BIT, NULL,
 				     tdep->func_void_type);
 
   set_gdbarch_short_bit (gdbarch, 2 * TARGET_CHAR_BIT);

@@ -717,6 +717,7 @@ sh_relax_section (bfd *abfd,
   *again = false;
 
   if (bfd_link_relocatable (link_info)
+      || (sec->flags & SEC_HAS_CONTENTS) == 0
       || (sec->flags & SEC_RELOC) == 0
       || sec->reloc_count == 0)
     return true;
@@ -1364,6 +1365,7 @@ sh_relax_delete_bytes (bfd *abfd,
       bfd_byte *ocontents;
 
       if (o == sec
+	  || (o->flags & SEC_HAS_CONTENTS) == 0
 	  || (o->flags & SEC_RELOC) == 0
 	  || o->reloc_count == 0)
 	continue;
@@ -2864,7 +2866,12 @@ sh_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	      name = NULL;
 	    else if (sym->_n._n_n._n_zeroes == 0
 		     && sym->_n._n_n._n_offset != 0)
-	      name = obj_coff_strings (input_bfd) + sym->_n._n_n._n_offset;
+	      {
+		if (sym->_n._n_n._n_offset < obj_coff_strings_len (input_bfd))
+		  name = obj_coff_strings (input_bfd) + sym->_n._n_n._n_offset;
+		else
+		  name = "?";
+	      }
 	    else
 	      {
 		strncpy (buf, sym->_n._n_name, SYMNMLEN);

@@ -2783,7 +2783,7 @@ remote_target::remote_notice_new_inferior (ptid_t currthread, bool executing)
   /* If this is a new thread, add it to GDB's thread list.
      If we leave it up to WFI to do this, bad things will happen.  */
 
-  thread_info *tp = find_thread_ptid (this, currthread);
+  thread_info *tp = this->find_thread (currthread);
   if (tp != NULL && tp->state == THREAD_EXITED)
     {
       /* We're seeing an event on a thread id we knew had exited.
@@ -2875,7 +2875,7 @@ get_remote_thread_info (thread_info *thread)
 static remote_thread_info *
 get_remote_thread_info (remote_target *target, ptid_t ptid)
 {
-  thread_info *thr = find_thread_ptid (target, ptid);
+  thread_info *thr = target->find_thread (ptid);
   return get_remote_thread_info (thr);
 }
 
@@ -4175,7 +4175,7 @@ remote_target::update_thread_list ()
 
 	      remote_notice_new_inferior (item.ptid, executing);
 
-	      thread_info *tp = find_thread_ptid (this, item.ptid);
+	      thread_info *tp = this->find_thread (item.ptid);
 	      remote_thread_info *info = get_remote_thread_info (tp);
 	      info->core = item.core;
 	      info->extra = std::move (item.extra);
@@ -4771,7 +4771,7 @@ remote_target::process_initial_stop_replies (int from_tty)
       if (ignore_event)
 	continue;
 
-      thread_info *evthread = find_thread_ptid (this, event_ptid);
+      thread_info *evthread = this->find_thread (event_ptid);
 
       if (ws.kind () == TARGET_WAITKIND_STOPPED)
 	{
@@ -5123,7 +5123,7 @@ remote_target::start_remote_1 (int from_tty, int extended_p)
 		}
 	    }
 	  else
-	    switch_to_thread (find_thread_ptid (this, curr_thread));
+	    switch_to_thread (this->find_thread (curr_thread));
 	}
 
       /* init_wait_for_inferior should be called before get_offsets in order
@@ -5214,7 +5214,7 @@ remote_target::start_remote_1 (int from_tty, int extended_p)
 	continue;
 
       /* Need to switch to a specific thread, because remote_check_symbols
-         uses INFERIOR_PTID to set the general thread.  */
+	 uses INFERIOR_PTID to set the general thread.  */
       scoped_restore_current_thread restore_thread;
       thread_info *thread = any_thread_of_inferior (inf);
       switch_to_thread (thread);
@@ -6192,7 +6192,7 @@ remote_target::remote_detach_1 (inferior *inf, int from_tty)
       remote_detach_pid (reply->ws.child_ptid ().pid ());
     }
 
-  thread_info *tp = find_thread_ptid (this, inferior_ptid);
+  thread_info *tp = this->find_thread (inferior_ptid);
 
   /* Check to see if we are detaching a fork parent.  Note that if we
      are detaching a fork child, tp == NULL.  */
@@ -6502,10 +6502,10 @@ remote_target::append_resumption (char *p, char *endp,
 	{
 	  /* If we don't know about the target thread's tid, then
 	     we're resuming magic_null_ptid (see caller).  */
-	  tp = find_thread_ptid (this, magic_null_ptid);
+	  tp = this->find_thread (magic_null_ptid);
 	}
       else
-	tp = find_thread_ptid (this, ptid);
+	tp = this->find_thread (ptid);
       gdb_assert (tp != NULL);
 
       if (tp->control.may_range_step)
@@ -6733,7 +6733,7 @@ remote_target::resume (ptid_t scope_ptid, int step, enum gdb_signal siggnal)
 	= get_remote_thread_info (inferior_thread ());
 
       /* We don't expect the core to ask to resume an already resumed (from
-         its point of view) thread.  */
+	 its point of view) thread.  */
       gdb_assert (remote_thr->get_resume_state () == resume_state::NOT_RESUMED);
 
       remote_thr->set_resumed_pending_vcont (step, siggnal);
@@ -7025,7 +7025,7 @@ remote_target::commit_resumed ()
       gdb_assert (!thread_is_in_step_over_chain (tp));
 
       /* We should never be commit-resuming a thread that has a stop reply.
-         Otherwise, we would end up reporting a stop event for a thread while
+	 Otherwise, we would end up reporting a stop event for a thread while
 	 it is running on the remote target.  */
       remote_state *rs = get_remote_state ();
       for (const auto &stop_reply : rs->stop_reply_queue)
@@ -7035,7 +7035,7 @@ remote_target::commit_resumed ()
 	= remote_thr->resumed_pending_vcont_info ();
 
       /* Check if we need to send a specific action for this thread.  If not,
-         it will be included in a wildcard resume instead.  */
+	 it will be included in a wildcard resume instead.  */
       if (info.step || info.sig != GDB_SIGNAL_0
 	  || !get_remote_inferior (tp->inf)->may_wildcard_vcont)
 	vcont_builder.push_action (tp->ptid, info.step, info.sig);
@@ -11250,8 +11250,8 @@ compare_sections_command (const char *args, int from_tty)
 	}
     }
   if (mismatched > 0)
-    warning (_("One or more sections of the target image does not match\n\
-the loaded file\n"));
+    warning (_("One or more sections of the target image does "
+	       "not match the loaded file"));
   if (args && !matched)
     gdb_printf (_("No loaded section named '%s'.\n"), args);
 }
@@ -13720,14 +13720,14 @@ remote_target::get_tracepoint_status (struct breakpoint *bp,
     {
       tp->hit_count = 0;
       tp->traceframe_usage = 0;
-      for (bp_location *loc : tp->locations ())
+      for (bp_location &loc : tp->locations ())
 	{
 	  /* If the tracepoint was never downloaded, don't go asking for
 	     any status.  */
 	  if (tp->number_on_target == 0)
 	    continue;
 	  xsnprintf (rs->buf.data (), size, "qTP:%x:%s", tp->number_on_target,
-		     phex_nz (loc->address, 0));
+		     phex_nz (loc.address, 0));
 	  putpkt (rs->buf);
 	  reply = remote_get_noisy_reply ();
 	  if (reply && *reply)
@@ -13964,7 +13964,7 @@ remote_target::set_disconnected_tracing (int val)
 int
 remote_target::core_of_thread (ptid_t ptid)
 {
-  thread_info *info = find_thread_ptid (this, ptid);
+  thread_info *info = this->find_thread (ptid);
 
   if (info != NULL && info->priv != NULL)
     return get_remote_thread_info (info)->core;
@@ -14732,7 +14732,7 @@ remote_new_objfile (struct objfile *objfile)
 	continue;
 
       /* Need to switch to a specific thread, because remote_check_symbols will
-         set the general thread using INFERIOR_PTID.
+	 set the general thread using INFERIOR_PTID.
 
 	 It's possible to have inferiors with no thread here, because we are
 	 called very early in the connection process, while the inferior is

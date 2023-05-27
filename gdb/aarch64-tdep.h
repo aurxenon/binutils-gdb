@@ -94,6 +94,8 @@ struct aarch64_gdbarch_tdep : gdbarch_tdep_base
   }
 
   int pauth_reg_base = 0;
+  /* Number of pauth masks.  */
+  int pauth_reg_count = 0;
   int ra_sign_state_regnum = 0;
 
   /* Returns true if the target supports pauth.  */
@@ -140,7 +142,7 @@ displaced_step_copy_insn_closure_up
 void aarch64_displaced_step_fixup (struct gdbarch *gdbarch,
 				   displaced_step_copy_insn_closure *dsc,
 				   CORE_ADDR from, CORE_ADDR to,
-				   struct regcache *regs);
+				   struct regcache *regs, bool completed_p);
 
 bool aarch64_displaced_step_hw_singlestep (struct gdbarch *gdbarch);
 

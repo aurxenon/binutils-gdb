@@ -1,4 +1,4 @@
-# Copyright 2022 Free Software Foundation, Inc.
+# Copyright 2022-2023 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -47,5 +47,4 @@ def stepIn(*, threadId, granularity="statement", **args):
 @request("continue")
 def continue_request(**args):
     send_gdb(ExecutionInvoker("continue", None))
-    # FIXME Just ignore threadId for the time being, and assume all-stop.
     return {"allThreadsContinued": True}

@@ -27,7 +27,6 @@
 #include "obstack.h"
 #include "bfdlink.h"
 #include "ctf-api.h"
-
 #include "ld.h"
 #include "ldmain.h"
 #include "ldexp.h"
@@ -42,9 +41,11 @@
 #include "demangle.h"
 #include "hashtab.h"
 #include "elf-bfd.h"
+#include "bfdver.h"
+
 #if BFD_SUPPORTS_PLUGINS
 #include "plugin.h"
-#endif /* BFD_SUPPORTS_PLUGINS */
+#endif
 
 #ifndef offsetof
 #define offsetof(TYPE, MEMBER) ((size_t) & (((TYPE*) 0)->MEMBER))
@@ -79,6 +80,8 @@ static unsigned int opb_shift = 0;
 /* Forward declarations.  */
 static void exp_init_os (etree_type *);
 static lang_input_statement_type *lookup_name (const char *);
+static bool wont_add_section_p (asection *,
+				lang_output_section_statement_type *);
 static void insert_undefined (const char *);
 static bool sort_def_symbol (struct bfd_link_hash_entry *, void *);
 static lang_statement_union_type *new_statement (enum statement_enum type,
@@ -131,6 +134,7 @@ bool lang_has_input_file = false;
 bool had_output_filename = false;
 bool lang_float_flag = false;
 bool delete_output_file_on_failure = false;
+bool enable_linker_version = false;
 struct lang_phdr *lang_phdr_list;
 struct lang_nocrossrefs *nocrossref_list;
 struct asneeded_minfo **asneeded_list_tail;
@@ -431,10 +435,18 @@ walk_wild_section_match (lang_wild_statement_type *ptr,
     }
   else
     {
-      lang_input_statement_type *f;
-      /* Perform the iteration over a single file.  */
-      f = lookup_name (file_spec);
-      if (f != file)
+      /* XXX Matching against non-wildcard filename in wild statements
+	 was done by going through lookup_name, which uses
+	 ->local_sym_name to compare against, not ->filename.  We retain
+	 this behaviour even though the above code paths use filename.
+	 It would be more logical to use it here as well, in which
+	 case the above wildcard() arm could be folded into this by using
+	 name_match.  This would also solve the worry of what to do
+	 about unset local_sym_name (in which case lookup_name simply adds
+	 the input file again).  */
+      const char *filename = file->local_sym_name;
+      if (filename == NULL
+	  || filename_cmp (filename, file_spec) != 0)
 	return;
     }
 
@@ -649,7 +661,8 @@ wild_sort (lang_wild_statement_type *wild,
 	 looking at the sections for this file.  */
 
       /* Find the correct node to append this section.  */
-      if (compare_section (sec->spec.sorted, section, (*tree)->section) < 0)
+      if (sec && sec->spec.sorted != none && sec->spec.sorted != by_none
+	  && compare_section (sec->spec.sorted, section, (*tree)->section) < 0)
 	tree = &((*tree)->left);
       else
 	tree = &((*tree)->right);
@@ -674,6 +687,11 @@ output_section_callback_sort (lang_wild_statement_type *ptr,
   os = (lang_output_section_statement_type *) output;
 
   if (unique_section_p (section, os))
+    return;
+
+  /* Don't add sections to the tree when we already know that
+     lang_add_section won't do anything with it.  */
+  if (wont_add_section_p (section, os))
     return;
 
   node = (lang_section_bst_type *) xmalloc (sizeof (lang_section_bst_type));
@@ -1773,7 +1791,7 @@ output_prev_sec_find (lang_output_section_statement_type *os)
       if (lookup->constraint < 0)
 	continue;
 
-      if (lookup->bfd_section != NULL && lookup->bfd_section->owner != NULL)
+      if (lookup->bfd_section != NULL)
 	return lookup->bfd_section;
     }
 
@@ -1792,13 +1810,13 @@ output_prev_sec_find (lang_output_section_statement_type *os)
    image symbols.  */
 
 static lang_statement_union_type **
-insert_os_after (lang_output_section_statement_type *after)
+insert_os_after (lang_statement_union_type *after)
 {
   lang_statement_union_type **where;
   lang_statement_union_type **assign = NULL;
   bool ignore_first;
 
-  ignore_first = after == (void *) lang_os_list.head;
+  ignore_first = after == lang_os_list.head;
 
   for (where = &after->header.next;
        *where != NULL;
@@ -1935,7 +1953,9 @@ lang_insert_orphan (asection *s,
 	  if (bfd_section == NULL)
 	    bfd_section = output_prev_sec_find (after);
 
-	  if (bfd_section != NULL && bfd_section != snew)
+	  if (bfd_section != NULL
+	      && bfd_section->owner != NULL
+	      && bfd_section != snew)
 	    place->section = &bfd_section->next;
 	}
 
@@ -2158,8 +2178,9 @@ lang_insert_orphan (asection *s,
 	  /* Place OS after AFTER if AFTER_NOTE is TRUE.  */
 	  if (place_after)
 	    {
-	      lang_statement_union_type **where = insert_os_after (after);
+	      lang_statement_union_type **where;
 
+	      where = insert_os_after ((lang_statement_union_type *) after);
 	      *add.tail = *where;
 	      *where = add.head;
 
@@ -2275,13 +2296,15 @@ lang_map (void)
 	    {
 	      if (! dis_header_printed)
 		{
-		  fprintf (config.map_file, _("\nDiscarded input sections\n\n"));
+		  minfo (_("\nDiscarded input sections\n\n"));
 		  dis_header_printed = true;
 		}
 
 	      print_input_section (s, true);
 	    }
     }
+  if (config.print_map_discarded && ! dis_header_printed)
+    minfo (_("\nThere are no discarded input sections\n"));
 
   minfo (_("\nMemory Configuration\n\n"));
   fprintf (config.map_file, "%-16s %-18s %-18s %s\n",
@@ -2309,7 +2332,7 @@ lang_map (void)
       print_nl ();
     }
 
-  fprintf (config.map_file, _("\nLinker script and memory map\n\n"));
+  minfo (_("\nLinker script and memory map\n\n"));
 
   if (!link_info.reduce_memory_overheads)
     {
@@ -2500,6 +2523,79 @@ lang_discard_section_p (asection *section)
   return discard;
 }
 
+/* Return TRUE if SECTION is never going to be added to output statement
+   OUTPUT.  lang_add_section() definitely won't do anything with SECTION
+   if this returns TRUE.  It may do something (or not) if this returns FALSE.
+
+   Can be used as early-out to filter matches.  This may set
+   output_section of SECTION, if it was unset, to the abs section in case
+   we discover SECTION to be always discarded.  This may also give
+   warning messages.  */
+
+static bool
+wont_add_section_p (asection *section,
+		    lang_output_section_statement_type *output)
+{
+  bool discard;
+
+  /* Is this section one we know should be discarded?  */
+  discard = lang_discard_section_p (section);
+
+  /* Discard input sections which are assigned to a section named
+     DISCARD_SECTION_NAME.  */
+  if (strcmp (output->name, DISCARD_SECTION_NAME) == 0)
+    discard = true;
+
+  if (discard)
+    {
+      if (section->output_section == NULL)
+	{
+	  /* This prevents future calls from assigning this section or
+	     warning about it again.  */
+	  section->output_section = bfd_abs_section_ptr;
+	}
+      else if (bfd_is_abs_section (section->output_section))
+	;
+      else if (link_info.non_contiguous_regions_warnings)
+	einfo (_("%P:%pS: warning: --enable-non-contiguous-regions makes "
+		 "section `%pA' from `%pB' match /DISCARD/ clause.\n"),
+	       NULL, section, section->owner);
+
+      return true;
+    }
+
+  if (section->output_section != NULL)
+    {
+      if (!link_info.non_contiguous_regions)
+	return true;
+
+      /* SECTION has already been handled in a special way
+	 (eg. LINK_ONCE): skip it.  */
+      if (bfd_is_abs_section (section->output_section))
+	return true;
+
+      /* Already assigned to the same output section, do not process
+	 it again, to avoid creating loops between duplicate sections
+	 later.  */
+      if (section->output_section == output->bfd_section)
+	return true;
+
+      if (link_info.non_contiguous_regions_warnings && output->bfd_section)
+	einfo (_("%P:%pS: warning: --enable-non-contiguous-regions may "
+		 "change behaviour for section `%pA' from `%pB' (assigned to "
+		 "%pA, but additional match: %pA)\n"),
+	       NULL, section, section->owner, section->output_section,
+	       output->bfd_section);
+
+      /* SECTION has already been assigned to an output section, but
+	 the user allows it to be mapped to another one in case it
+	 overflows. We'll later update the actual output section in
+	 size_input_section as appropriate.  */
+    }
+
+  return false;
+}
+
 /* The wild routines.
 
    These expand statements like *(.text) and foo.o to a list of
@@ -2518,32 +2614,11 @@ lang_add_section (lang_statement_list_type *ptr,
 {
   flagword flags = section->flags;
 
-  bool discard;
   lang_input_section_type *new_section;
   bfd *abfd = link_info.output_bfd;
 
-  /* Is this section one we know should be discarded?  */
-  discard = lang_discard_section_p (section);
-
-  /* Discard input sections which are assigned to a section named
-     DISCARD_SECTION_NAME.  */
-  if (strcmp (output->name, DISCARD_SECTION_NAME) == 0)
-    discard = true;
-
-  if (discard)
-    {
-      if (section->output_section == NULL)
-	{
-	  /* This prevents future calls from assigning this section.  */
-	  section->output_section = bfd_abs_section_ptr;
-	}
-      else if (link_info.non_contiguous_regions_warnings)
-	einfo (_("%P:%pS: warning: --enable-non-contiguous-regions makes "
-		 "section `%pA' from `%pB' match /DISCARD/ clause.\n"),
-	       NULL, section, section->owner);
-
-      return;
-    }
+  if (wont_add_section_p (section, output))
+    return;
 
   if (sflag_info)
     {
@@ -2552,35 +2627,6 @@ lang_add_section (lang_statement_list_type *ptr,
       keep = bfd_lookup_section_flags (&link_info, sflag_info, section);
       if (!keep)
 	return;
-    }
-
-  if (section->output_section != NULL)
-    {
-      if (!link_info.non_contiguous_regions)
-	return;
-
-      /* SECTION has already been handled in a special way
-	 (eg. LINK_ONCE): skip it.  */
-      if (bfd_is_abs_section (section->output_section))
-	return;
-
-      /* Already assigned to the same output section, do not process
-	 it again, to avoid creating loops between duplicate sections
-	 later.  */
-      if (section->output_section == output->bfd_section)
-	return;
-
-      if (link_info.non_contiguous_regions_warnings && output->bfd_section)
-	einfo (_("%P:%pS: warning: --enable-non-contiguous-regions may "
-		 "change behaviour for section `%pA' from `%pB' (assigned to "
-		 "%pA, but additional match: %pA)\n"),
-	       NULL, section, section->owner, section->output_section,
-	       output->bfd_section);
-
-      /* SECTION has already been assigned to an output section, but
-	 the user allows it to be mapped to another one in case it
-	 overflows. We'll later update the actual output section in
-	 size_input_section as appropriate.  */
     }
 
   /* We don't copy the SEC_NEVER_LOAD flag from an input section
@@ -4369,21 +4415,55 @@ process_insert_statements (lang_statement_union_type **start)
 		      else
 			link_info.output_bfd->section_last = first_sec->prev;
 		      /* Add back.  */
-		      last_sec->next = sec->next;
-		      if (sec->next != NULL)
-			sec->next->prev = last_sec;
+		      if (sec->owner == NULL)
+			/* SEC is the absolute section, from the
+			   first dummy output section statement.  Add
+			   back the sections we trimmed off to the
+			   start of the bfd sections.  */
+			sec = NULL;
+		      if (sec != NULL)
+			last_sec->next = sec->next;
+		      else
+			last_sec->next = link_info.output_bfd->sections;
+		      if (last_sec->next != NULL)
+			last_sec->next->prev = last_sec;
 		      else
 			link_info.output_bfd->section_last = last_sec;
 		      first_sec->prev = sec;
-		      sec->next = first_sec;
+		      if (first_sec->prev != NULL)
+			first_sec->prev->next = first_sec;
+		      else
+			link_info.output_bfd->sections = first_sec;
 		    }
 		}
-
-	      first_os = NULL;
-	      last_os = NULL;
 	    }
 
-	  ptr = insert_os_after (where);
+	  lang_statement_union_type *after = (void *) where;
+	  if (where == &lang_os_list.head->output_section_statement
+	      && where->next == first_os)
+	    {
+	      /* PR30155.  Handle a corner case where the statement
+		 list is something like the following:
+		 . LOAD t.o
+		 . .data           0x0000000000000000        0x0
+		 .                 [0x0000000000000000]              b = .
+		 .  *(.data)
+		 .  .data          0x0000000000000000        0x0 t.o
+		 .                 0x0000000000000000        0x4 LONG 0x0
+		 . INSERT BEFORE .text.start
+		 .                 [0x0000000000000004]              a = .
+		 . .text.start     0x0000000000000000        0x0
+		 .                 [0x0000000000000000]              c = .
+		 . OUTPUT(a.out elf64-x86-64)
+		 Here we do not want to allow insert_os_after to
+		 choose a point inside the list we are moving.
+		 That would lose the list.  Instead, let
+		 insert_os_after work from the INSERT, which in this
+		 particular example will result in inserting after
+		 the assignment "a = .".  */
+	      after = *s;
+	    }
+	  ptr = insert_os_after (after);
 	  /* Snip everything from the start of the list, up to and
 	     including the insert statement we are currently processing.  */
 	  first = *start;
@@ -4394,6 +4474,8 @@ process_insert_statements (lang_statement_union_type **start)
 	    statement_list.tail = s;
 	  *ptr = first;
 	  s = start;
+	  first_os = NULL;
+	  last_os = NULL;
 	  continue;
 	}
       s = &(*s)->header.next;
@@ -4717,6 +4799,50 @@ print_all_symbols (asection *sec)
   obstack_free (&map_obstack, entries);
 }
 
+/* Returns TRUE if SYM is a symbol suitable for printing
+   in a linker map as a local symbol.  */
+
+static bool
+ld_is_local_symbol (asymbol * sym)
+{
+  const char * name = bfd_asymbol_name (sym);
+
+  if (name == NULL || *name == 0)
+    return false;
+
+  if (strcmp (name, "(null)") == 0)
+    return false;
+
+  /* Skip .Lxxx and such like.  */
+  if (bfd_is_local_label (link_info.output_bfd, sym))
+    return false;
+
+  /* FIXME: This is intended to skip ARM mapping symbols,
+     which for some reason are not excluded by bfd_is_local_label,
+     but maybe it is wrong for other architectures.
+     It would be better to fix bfd_is_local_label.  */  
+  if (*name == '$')
+    return false;
+
+  /* Some local symbols, eg _GLOBAL_OFFSET_TABLE_, are present
+     in the hash table, so do not print duplicates here.  */
+  struct bfd_link_hash_entry * h;
+  h = bfd_link_hash_lookup (link_info.hash, name, false /* create */, 
+			    false /* copy */, true /* follow */);
+  if (h == NULL)
+    return true;
+  
+  /* Symbols from the plugin owned BFD will not get their own
+     iteration of this function, but can be on the link_info
+     list.  So include them here.  */
+  if (h->u.def.section->owner != NULL
+      && ((bfd_get_file_flags (h->u.def.section->owner) & (BFD_LINKER_CREATED | BFD_PLUGIN))
+	  == (BFD_LINKER_CREATED | BFD_PLUGIN)))
+    return true;
+
+  return false;
+}
+
 /* Print information about an input section to the map file.  */
 
 static void
@@ -4772,6 +4898,44 @@ print_input_section (asection *i, bool is_discarded)
 	 later overlay is shorter than an earier one.  */
       if (addr + TO_ADDR (size) > print_dot)
 	print_dot = addr + TO_ADDR (size);
+
+      if (config.print_map_locals)
+	{
+	  long  storage_needed;
+
+	  /* FIXME: It would be better to cache this table, rather
+	     than recreating it for each output section.  */
+	  /* FIXME: This call is not working for non-ELF based targets.
+	     Find out why.  */
+	  storage_needed = bfd_get_symtab_upper_bound (link_info.output_bfd);
+	  if (storage_needed > 0)
+	    {
+	      asymbol **  symbol_table;
+	      long        number_of_symbols;
+	      long        j;
+
+	      symbol_table = xmalloc (storage_needed);
+	      number_of_symbols = bfd_canonicalize_symtab (link_info.output_bfd, symbol_table);
+
+	      for (j = 0; j < number_of_symbols; j++)
+		{
+		  asymbol *     sym = symbol_table[j];
+		  bfd_vma       sym_addr = sym->value + i->output_section->vma;
+		  
+		  if (sym->section == i->output_section
+		      && (sym->flags & BSF_LOCAL) != 0
+		      && sym_addr >= addr
+		      && sym_addr < print_dot
+		      && ld_is_local_symbol (sym))
+		    {
+		      print_spaces (SECTION_NAME_MAP_LENGTH);
+		      minfo ("0x%V        (local) %s\n", sym_addr, bfd_asymbol_name (sym));
+		    }
+		}
+
+	      free (symbol_table);
+	    }
+	}
     }
 }
 
@@ -7922,13 +8086,13 @@ lang_process (void)
      statements we can give values to symbolic origin/length now.  */
   lang_do_memory_regions (true);
 
+  ldemul_before_plugin_all_symbols_read ();
+
 #if BFD_SUPPORTS_PLUGINS
   if (link_info.lto_plugin_active)
     {
       lang_statement_list_type added;
       lang_statement_list_type files, inputfiles;
-
-      ldemul_before_plugin_all_symbols_read ();
 
       /* Now all files are read, let the plugin(s) decide if there
 	 are any more to be added to the link before we call the
@@ -8032,17 +8196,17 @@ lang_process (void)
     }
 #endif /* BFD_SUPPORTS_PLUGINS */
 
-  /* Make sure that nobody has tried to add a symbol to this list
-     before now.  */
-  ASSERT (link_info.gc_sym_list == NULL);
+  struct bfd_sym_chain **sym = &link_info.gc_sym_list;
+  while (*sym)
+    sym = &(*sym)->next;
 
-  link_info.gc_sym_list = &entry_symbol;
+  *sym = &entry_symbol;
 
   if (entry_symbol.name == NULL)
     {
-      link_info.gc_sym_list = ldlang_undef_chain_list_head;
+      *sym = ldlang_undef_chain_list_head;
 
-      /* entry_symbol is normally initialied by a ENTRY definition in the
+      /* entry_symbol is normally initialised by an ENTRY definition in the
 	 linker script or the -e command line option.  But if neither of
 	 these have been used, the target specific backend may still have
 	 provided an entry symbol via a call to lang_default_entry().
@@ -8221,6 +8385,28 @@ lang_process (void)
   lang_end ();
 }
 
+void
+lang_add_version_string (void)
+{
+  if (! enable_linker_version)
+    return;
+
+  const char * str = "GNU ld ";
+  int len = strlen (str);
+  int i;
+
+  for (i = 0 ; i < len ; i++)
+    lang_add_data (BYTE, exp_intop (str[i]));
+
+  str = BFD_VERSION_STRING;
+  len = strlen (str);
+
+  for (i = 0 ; i < len ; i++)
+    lang_add_data (BYTE, exp_intop (str[i]));
+
+  lang_add_data (BYTE, exp_intop ('\0'));
+}
+
 /* EXPORTED TO YACC */
 
 void
@@ -8358,6 +8544,89 @@ lang_add_data (int type, union etree_union *exp)
   new_stmt = new_stat (lang_data_statement, stat_ptr);
   new_stmt->exp = exp;
   new_stmt->type = type;
+}
+
+void
+lang_add_string (const char *s)
+{
+  bfd_vma  len = strlen (s);
+  bfd_vma  i;
+  bool     escape = false;
+
+  /* Add byte expressions until end of string.  */
+  for (i = 0 ; i < len; i++)
+    {
+      char c = *s++;
+
+      if (escape)
+	{
+	  switch (c)
+	    {
+	    default:
+	      /* Ignore the escape.  */
+	      break;
+
+	    case 'n': c = '\n'; break;
+	    case 'r': c = '\r'; break;
+	    case 't': c = '\t'; break;
+	  
+	    case '0':
+	    case '1':
+	    case '2':
+	    case '3':
+	    case '4':
+	    case '5':
+	    case '6':
+	    case '7':
+	      /* We have an octal number.  */
+	      {
+		unsigned int value = c - '0';
+
+		c = *s;
+		if ((c >= '0') && (c <= '7'))
+		  {
+		    value <<= 3;
+		    value += (c - '0');
+		    i++;
+		    s++;
+
+		    c = *s;
+		    if ((c >= '0') && (c <= '7'))
+		      {
+			value <<= 3;
+			value += (c - '0');
+			i++;
+			s++;
+		      }
+		  }
+
+		if (value > 0xff)
+		  {
+		    /* octal: \777 is treated as '\077' + '7' */
+		    value >>= 3;
+		    i--;
+		    s--;
+		  }
+
+		c = value;
+	      }
+	      break;
+	    }
+
+	  lang_add_data (BYTE, exp_intop (c));
+	  escape = false;
+	}
+      else
+	{
+	  if (c == '\\')
+	    escape = true;
+	  else
+	    lang_add_data (BYTE, exp_intop (c));
+	}
+    }
+
+  /* Remeber to terminate the string.  */
+  lang_add_data (BYTE, exp_intop (0));
 }
 
 /* Create a new reloc statement.  RELOC is the BFD relocation type to

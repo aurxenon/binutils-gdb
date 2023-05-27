@@ -117,6 +117,13 @@ enum exec_direction_kind
 /* The current execution direction.  */
 extern enum exec_direction_kind execution_direction;
 
+/* Call this to point 'previous_thread' at the thread returned by
+   inferior_thread, or at nullptr, if there's no selected thread.  */
+extern void update_previous_thread ();
+
+/* Get a weak reference to 'previous_thread'.  */
+extern thread_info *get_previous_thread ();
+
 extern void start_remote (int from_tty);
 
 /* Clear out all variables saying what to do when inferior is
@@ -210,10 +217,6 @@ extern void set_step_info (thread_info *tp,
 extern void print_signal_received_reason (struct ui_out *uiout,
 					  enum gdb_signal siggnal);
 
-/* Print why the inferior has stopped.  We are done with a
-   step/next/si/ni command, print why the inferior has stopped.  */
-extern void print_end_stepping_range_reason (struct ui_out *uiout);
-
 /* The inferior was terminated by a signal, print why it stopped.  */
 extern void print_signal_exited_reason (struct ui_out *uiout,
 					enum gdb_signal siggnal);
@@ -262,9 +265,6 @@ extern void update_signals_program_target (void);
    inferior.  Currently, those variables are $_exitcode and
    $_exitsignal.  */
 extern void clear_exit_convenience_vars (void);
-
-/* Dump LEN bytes at BUF in hex to a string and return it.  */
-extern std::string displaced_step_dump_bytes (const gdb_byte *buf, size_t len);
 
 extern void update_observer_mode (void);
 

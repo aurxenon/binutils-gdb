@@ -185,27 +185,29 @@ make_types (struct gdbarch *arch)
 
   /* The builtin_type_mumble variables are sometimes uninitialized when
      this is called, so we avoid using them.  */
-  tdep->voyd = arch_type (arch, TYPE_CODE_VOID, TARGET_CHAR_BIT, "void");
+  type_allocator alloc (arch);
+  tdep->voyd = alloc.new_type (TYPE_CODE_VOID, TARGET_CHAR_BIT, "void");
   tdep->ptr_voyd
-    = arch_pointer_type (arch, gdbarch_ptr_bit (arch), NULL, tdep->voyd);
+    = init_pointer_type (alloc, gdbarch_ptr_bit (arch), NULL, tdep->voyd);
   tdep->func_voyd = lookup_function_type (tdep->voyd);
 
   xsnprintf (type_name, sizeof (type_name), "%s_data_addr_t",
 	     gdbarch_bfd_arch_info (arch)->printable_name);
   tdep->data_addr_reg_type
-    = arch_pointer_type (arch, data_addr_reg_bits, type_name, tdep->voyd);
+    = init_pointer_type (alloc, data_addr_reg_bits, type_name, tdep->voyd);
 
   xsnprintf (type_name, sizeof (type_name), "%s_code_addr_t",
 	     gdbarch_bfd_arch_info (arch)->printable_name);
   tdep->code_addr_reg_type
-    = arch_pointer_type (arch, code_addr_reg_bits, type_name, tdep->func_voyd);
+    = init_pointer_type (alloc, code_addr_reg_bits, type_name,
+			 tdep->func_voyd);
 
-  tdep->uint8  = arch_integer_type (arch,  8, 1, "uint8_t");
-  tdep->uint16 = arch_integer_type (arch, 16, 1, "uint16_t");
-  tdep->int8   = arch_integer_type (arch,  8, 0, "int8_t");
-  tdep->int16  = arch_integer_type (arch, 16, 0, "int16_t");
-  tdep->int32  = arch_integer_type (arch, 32, 0, "int32_t");
-  tdep->int64  = arch_integer_type (arch, 64, 0, "int64_t");
+  tdep->uint8  = init_integer_type (alloc,  8, 1, "uint8_t");
+  tdep->uint16 = init_integer_type (alloc, 16, 1, "uint16_t");
+  tdep->int8   = init_integer_type (alloc,  8, 0, "int8_t");
+  tdep->int16  = init_integer_type (alloc, 16, 0, "int16_t");
+  tdep->int32  = init_integer_type (alloc, 32, 0, "int32_t");
+  tdep->int64  = init_integer_type (alloc, 64, 0, "int64_t");
 }
 
 
@@ -2029,7 +2031,7 @@ m32c_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   int num_prototyped_args = 0;
 
   {
-    struct type *func_type = value_type (function);
+    struct type *func_type = function->type ();
 
     /* Dereference function pointer types.  */
     if (func_type->code () == TYPE_CODE_PTR)
@@ -2061,8 +2063,8 @@ m32c_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   for (i = nargs - 1; i >= 0; i--)
     {
       struct value *arg = args[i];
-      const gdb_byte *arg_bits = value_contents (arg).data ();
-      struct type *arg_type = value_type (arg);
+      const gdb_byte *arg_bits = arg->contents ().data ();
+      struct type *arg_type = arg->type ();
       ULONGEST arg_size = arg_type->length ();
 
       /* Can it go in r1 or r1l (for m16c) or r0 or r0l (for m32c)?  */

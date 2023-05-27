@@ -293,6 +293,7 @@ SUBDIR_MI_SRCS = \
 	mi/mi-cmd-target.c \
 	mi/mi-cmd-var.c \
 	mi/mi-cmds.c \
+	mi/mi-common.c \
 	mi/mi-console.c \
 	mi/mi-getopt.c \
 	mi/mi-interp.c \
@@ -302,10 +303,6 @@ SUBDIR_MI_SRCS = \
 	mi/mi-symbol-cmds.c
 
 SUBDIR_MI_OBS = $(patsubst %.c,%.o,$(SUBDIR_MI_SRCS))
-
-SUBDIR_MI_DEPS =
-SUBDIR_MI_LDFLAGS =
-SUBDIR_MI_CFLAGS =
 
 #
 # TUI sub directory definitions
@@ -417,6 +414,7 @@ SUBDIR_PYTHON_SRCS = \
 	python/py-lazy-string.c \
 	python/py-linetable.c \
 	python/py-membuf.c \
+	python/py-mi.c \
 	python/py-micmd.c \
 	python/py-newobjfileevent.c \
 	python/py-objfile.c \
@@ -492,7 +490,6 @@ SELFTESTS_SRCS = \
 	unittests/ui-file-selftests.c \
 	unittests/unique_xmalloc_ptr_char.c \
 	unittests/unpack-selftests.c \
-	unittests/utils-selftests.c \
 	unittests/vec-utils-selftests.c \
 	unittests/xml-utils-selftests.c
 
@@ -632,8 +629,8 @@ INTERNAL_CPPFLAGS = $(CPPFLAGS) @GUILE_CPPFLAGS@ @PYTHON_CPPFLAGS@ \
 # INTERNAL_CFLAGS is the aggregate of all other *CFLAGS macros.
 INTERNAL_CFLAGS_BASE = \
 	$(GLOBAL_CFLAGS) $(PROFILE_CFLAGS) \
-	$(GDB_CFLAGS) $(OPCODES_CFLAGS) $(READLINE_CFLAGS) $(ZLIBINC) \
-	$(ZSTD_CFLAGS) $(BFD_CFLAGS) $(INCLUDE_CFLAGS) $(LIBDECNUMBER_CFLAGS) \
+	$(GDB_CFLAGS) $(OPCODES_CFLAGS) $(BFD_CFLAGS) $(INCLUDE_CFLAGS) \
+	$(READLINE_CFLAGS) $(ZLIBINC) $(ZSTD_CFLAGS) $(LIBDECNUMBER_CFLAGS) \
 	$(INTL_CFLAGS) $(INCGNU) $(INCSUPPORT) $(LIBBACKTRACE_INC) \
 	$(ENABLE_CFLAGS) $(INTERNAL_CPPFLAGS) $(SRCHIGH_CFLAGS) \
 	$(TOP_CFLAGS) $(PTHREAD_CFLAGS) $(DEBUGINFOD_CFLAGS) $(GMPINC) \
@@ -1065,10 +1062,12 @@ COMMON_SFILES = \
 	dummy-frame.c \
 	dwarf2/abbrev.c \
 	dwarf2/abbrev-cache.c \
+	dwarf2/ada-imported.c \
 	dwarf2/attribute.c \
 	dwarf2/comp-unit-head.c \
 	dwarf2/cooked-index.c \
 	dwarf2/cu.c \
+	dwarf2/die.c \
 	dwarf2/dwz.c \
 	dwarf2/expr.c \
 	dwarf2/frame-tailcall.c \
@@ -1081,6 +1080,8 @@ COMMON_SFILES = \
 	dwarf2/loc.c \
 	dwarf2/macro.c \
 	dwarf2/read.c \
+	dwarf2/read-debug-names.c \
+	dwarf2/read-gdb-index.c \
 	dwarf2/section.c \
 	dwarf2/stringify.c \
 	eval.c \
@@ -1209,6 +1210,7 @@ COMMON_SFILES = \
 	target-float.c \
 	type-stack.c \
 	typeprint.c \
+	ui.c \
 	ui-file.c \
 	ui-out.c \
 	ui-style.c \
@@ -1248,8 +1250,8 @@ SFILES = \
 	stub-termcap.c \
 	symfile-mem.c \
 	ui-file.h \
-	mi/mi-common.c \
 	$(SUBDIR_CLI_SRCS) \
+	$(SUBDIR_MI_SRCS) \
 	$(SUBDIR_TARGET_SRCS) \
 	$(COMMON_SFILES) \
 	$(SUBDIR_GCC_COMPILE_SRCS)
@@ -1268,11 +1270,13 @@ HFILES_NO_SRCDIR = \
 	addrmap.h \
 	alpha-bsd-tdep.h \
 	alpha-tdep.h \
+	amd-dbgapi-target.h \
 	amd64-darwin-tdep.h \
 	amd64-linux-tdep.h \
 	amd64-nat.h \
 	amd64-ravenscar-thread.h \
 	amd64-tdep.h \
+	amdgpu-tdep.h \
 	annotate.h \
 	arc-tdep.h \
 	arch-utils.h \
@@ -1324,6 +1328,8 @@ HFILES_NO_SRCDIR = \
 	dwarf2/index-common.h \
 	dwarf2/loc.h \
 	dwarf2/read.h \
+	dwarf2/read-debug-names.h \
+	dwarf2/read-gdb-index.h \
 	event-top.h \
 	exceptions.h \
 	exec.h \
@@ -1492,6 +1498,7 @@ HFILES_NO_SRCDIR = \
 	tramp-frame.h \
 	type-stack.h \
 	typeprint.h \
+	ui.h \
 	ui-file.h \
 	ui-out.h \
 	ui-style.h \
@@ -1859,6 +1866,7 @@ COMMON_OBS = $(DEPFILES) $(CONFIG_OBS) $(YYOBJ) \
 	xml-builtin.o \
 	$(patsubst %.c,%.o,$(COMMON_SFILES)) \
 	$(SUBDIR_CLI_OBS) \
+	$(SUBDIR_MI_OBS) \
 	$(SUBDIR_TARGET_OBS) \
 	$(SUBDIR_GCC_COMPILE_OBS)
 
@@ -2219,6 +2227,7 @@ distclean: clean
 	rm -f gdb-gdb.py gdb-gdb.gdb
 	rm -f y.output yacc.acts yacc.tmp y.tab.h
 	rm -f config.log config.cache
+	rm -f config.lt libtool
 	rm -f Makefile
 	rm -rf $(DEPDIR)
 	for i in $(CONFIG_SRC_SUBDIR); do \

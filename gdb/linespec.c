@@ -403,7 +403,7 @@ static std::vector<symtab_and_line> decode_digits_ordinary
   (struct linespec_state *self,
    linespec *ls,
    int line,
-   linetable_entry **best_entry);
+   const linetable_entry **best_entry);
 
 static std::vector<symtab_and_line> decode_digits_list_mode
   (struct linespec_state *self,
@@ -2079,7 +2079,7 @@ create_sals_line_offset (struct linespec_state *self,
     values = decode_digits_list_mode (self, ls, val);
   else
     {
-      struct linetable_entry *best_entry = NULL;
+      const linetable_entry *best_entry = NULL;
       int i, j;
 
       std::vector<symtab_and_line> intermediate_results
@@ -2128,7 +2128,7 @@ create_sals_line_offset (struct linespec_state *self,
 	if (filter[i])
 	  {
 	    struct symbol *sym = (blocks[i]
-				  ? block_containing_function (blocks[i])
+				  ? blocks[i]->containing_function ()
 				  : NULL);
 
 	    if (self->funfirstline)
@@ -3900,14 +3900,12 @@ find_label_symbols_in_block (const struct block *block,
 {
   if (completion_mode)
     {
-      struct block_iterator iter;
-      struct symbol *sym;
       size_t name_len = strlen (name);
 
       int (*cmp) (const char *, const char *, size_t);
       cmp = case_sensitivity == case_sensitive_on ? strncmp : strncasecmp;
 
-      ALL_BLOCK_SYMBOLS (block, iter, sym)
+      for (struct symbol *sym : block_iterator_range (block))
 	{
 	  if (symbol_matches_domain (sym->language (),
 				     sym->domain (), LABEL_DOMAIN)
@@ -4028,7 +4026,7 @@ static std::vector<symtab_and_line>
 decode_digits_ordinary (struct linespec_state *self,
 			linespec *ls,
 			int line,
-			struct linetable_entry **best_entry)
+			const linetable_entry **best_entry)
 {
   std::vector<symtab_and_line> sals;
   for (const auto &elt : ls->file_symtabs)
@@ -4081,7 +4079,7 @@ linespec_parse_variable (struct linespec_state *self, const char *variable)
       sscanf ((variable[1] == '$') ? variable + 2 : variable + 1, "%d", &index);
       val_history
 	= access_value_history ((variable[1] == '$') ? -index : index);
-      if (value_type (val_history)->code () != TYPE_CODE_INT)
+      if (val_history->type ()->code () != TYPE_CODE_INT)
 	error (_("History values used in line "
 		 "specs must have integer values."));
       offset.offset = value_as_long (val_history);

@@ -269,7 +269,7 @@ serialize_mi_result_1 (PyObject *result, const char *field_name)
 	gdbpy_handle_exception ();
       for (Py_ssize_t i = 0; i < len; ++i)
 	{
-          gdbpy_ref<> item (PySequence_ITEM (result, i));
+	  gdbpy_ref<> item (PySequence_ITEM (result, i));
 	  if (item == nullptr)
 	    gdbpy_handle_exception ();
 	  serialize_mi_result_1 (item.get (), nullptr);
@@ -293,6 +293,21 @@ serialize_mi_result_1 (PyObject *result, const char *field_name)
     }
   else
     {
+      if (PyLong_Check (result))
+	{
+	  int overflow = 0;
+	  gdb_py_longest val = gdb_py_long_as_long_and_overflow (result,
+								 &overflow);
+	  if (PyErr_Occurred () != nullptr)
+	    gdbpy_handle_exception ();
+	  if (overflow == 0)
+	    {
+	      uiout->field_signed (field_name, val);
+	      return;
+	    }
+	  /* Fall through to the string case on overflow.  */
+	}
+
       gdb::unique_xmalloc_ptr<char> string (gdbpy_obj_to_string (result));
       if (string == nullptr)
 	gdbpy_handle_exception ();
@@ -340,10 +355,11 @@ mi_command_py::invoke (struct mi_parse *parse) const
 
   pymicmd_debug_printf ("this = %p, name = %s", this, name ());
 
-  mi_parse_argv (parse->args, parse);
+  parse->parse_argv ();
 
   if (parse->argv == nullptr)
-    error (_("Problem parsing arguments: %s %s"), parse->command, parse->args);
+    error (_("Problem parsing arguments: %s %s"), parse->command,
+	   parse->args ());
 
 
   gdbpy_enter enter_py;
@@ -452,7 +468,7 @@ micmdpy_install_command (micmdpy_object *obj)
   if (cmd != nullptr && cmd_py == nullptr)
     {
       /* There is already an MI command registered with that name, and it's not
-         a Python one.  Forbid replacing a non-Python MI command.  */
+	 a Python one.  Forbid replacing a non-Python MI command.  */
       PyErr_SetString (PyExc_RuntimeError,
 		       _("unable to add command, name is already in use"));
       return -1;
@@ -461,7 +477,7 @@ micmdpy_install_command (micmdpy_object *obj)
   if (cmd_py != nullptr)
     {
       /* There is already a Python MI command registered with that name, swap
-         in the new gdb.MICommand implementation.  */
+	 in the new gdb.MICommand implementation.  */
       cmd_py->swap_python_object (obj);
     }
   else
@@ -595,7 +611,7 @@ micmdpy_dealloc (PyObject *obj)
 
 /* Python initialization for the MI commands components.  */
 
-int
+static int CPYCHECKER_NEGATIVE_RESULT_SETS_EXCEPTION
 gdbpy_initialize_micommands ()
 {
   micmdpy_object_type.tp_new = PyType_GenericNew;
@@ -614,7 +630,9 @@ gdbpy_initialize_micommands ()
   return 0;
 }
 
-void
+/* Cleanup just before GDB shuts down the Python interpreter.  */
+
+static void
 gdbpy_finalize_micommands ()
 {
   /* mi_command_py objects hold references to micmdpy_object objects.  They must
@@ -737,3 +755,5 @@ _initialize_py_micmd ()
      show_pymicmd_debug,
      &setdebuglist, &showdebuglist);
 }
+
+GDBPY_INITIALIZE_FILE (gdbpy_initialize_micommands, gdbpy_finalize_micommands);

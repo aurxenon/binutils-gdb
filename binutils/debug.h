@@ -425,7 +425,12 @@ struct debug_write_fns
 
 /* Return a debugging handle.  */
 
-extern void *debug_init (void);
+extern void *debug_init (bfd *);
+
+/* Allocate bytes on the debug handle objalloc memory pool.  */
+
+extern void *debug_xalloc (void *, size_t);
+extern void *debug_xzalloc (void *, size_t);
 
 /* Set the source filename.  This implicitly starts a new compilation
    unit.  */

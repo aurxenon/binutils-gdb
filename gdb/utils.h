@@ -1,5 +1,3 @@
-/* *INDENT-OFF* */ /* ATTRIBUTE_PRINTF confuses indent, avoid running it
-		      for now.  */
 /* I/O, string, cleanup, and other random utilities for GDB.
    Copyright (C) 1986-2023 Free Software Foundation, Inc.
 
@@ -137,9 +135,6 @@ private:
 
 extern int gdb_filename_fnmatch (const char *pattern, const char *string,
 				 int flags);
-
-extern void substitute_path_component (char **stringp, const char *from,
-				       const char *to);
 
 std::string ldirname (const char *filename);
 
@@ -287,8 +282,6 @@ extern void (*deprecated_error_begin_hook) (void);
 
 extern const char *warning_pre_print;
 
-extern void error_stream (const string_file &) ATTRIBUTE_NORETURN;
-
 extern void demangler_vwarning (const char *file, int line,
 			       const char *, va_list ap)
      ATTRIBUTE_PRINTF (3, 0);
@@ -304,13 +297,6 @@ extern pid_t wait_to_die_with_timeout (pid_t pid, int *status, int timeout);
 #endif
 
 extern int myread (int, char *, int);
-
-/* Integer exponentiation: Return V1**V2, where both arguments
-   are integers.
-
-   Requires V1 != 0 if V2 < 0.
-   Returns 1 for 0 ** 0.  */
-extern ULONGEST uinteger_pow (ULONGEST v1, LONGEST v2);
 
 /* Resource limits used by getrlimit and setrlimit.  */
 
@@ -343,5 +329,12 @@ extern void dump_core (void);
 extern void copy_bitwise (gdb_byte *dest, ULONGEST dest_offset,
 			  const gdb_byte *source, ULONGEST source_offset,
 			  ULONGEST nbits, int bits_big_endian);
+
+/* When readline decides that the terminal cannot auto-wrap lines, it reduces
+   the width of the reported screen width by 1.  This variable indicates
+   whether that's the case or not, allowing us to add it back where
+   necessary.  See _rl_term_autowrap in readline/terminal.c.  */
+
+extern int readline_hidden_cols;
 
 #endif /* UTILS_H */
